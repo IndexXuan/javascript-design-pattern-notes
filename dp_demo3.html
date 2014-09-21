@@ -1,0 +1,33 @@
+<script>
+        function foo() {
+            var a = 10;
+
+            function bar() {
+                a *= 2;
+            }
+
+            bar();
+            return a;
+        }
+
+        var baz = foo(); //baz is a reference to function bar.
+        //baz(); //error Uncaught TypeError: Property 'baz' of object [object Window] is not a function 
+        //baz(); //error Uncaught TypeError: Property 'baz' of object [object Window] is not a function 
+
+        function a() {
+            //return alert("a");
+            return function() { console.log("a"); }
+        }
+        var b = a();
+        b();
+        b();
+        b();
+
+        var c = (function() {
+            //console.log("bbb"); //无返回值怎么赋值给c，自然c就不是一个function，会报错！
+            return function() { console.log("bbb"); } //return function() { //... } 是个最简单的创建闭包的方法 
+        })()
+        c();
+        c();
+        c();
+</script>        

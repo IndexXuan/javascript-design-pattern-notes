@@ -1,0 +1,319 @@
+<html>
+<head>
+<meta charset="utf-8" /> 
+    <title>无标题</title>
+</head>
+<body>
+
+<script>
+    
+    // Selector
+    function $(selector) {
+        if(!!document.querySelector {
+            return document.querySelector(selector);
+        } else {
+            return document.getElementById(selector.slice(1));
+        }
+    }
+
+    //Interface类
+    //下面是本书中使用的Interface类的定义：包括对参数及其类型进行了强制严格的检查！！！
+    //如果没有错误被抛出则可以确定接口得到了正确的声明和实现
+
+    //Constructor
+    var Interface = function(name, methods) {
+        if(arguments.length != 2) {
+            throw new Error("Interface constructor called with" + 
+            arguments.length + "arguments, but expected exactly 2");
+        }
+
+        this.name = name;
+        this.methods = [];
+        for(var i = 0, len = methods.length; i < len; i++) {
+            if(typeof methods[i] !== "string") {
+                throw new Error("Interface constructor expects method names to be passed in as a string!");
+            }
+            this.methods.push(methods[i]);
+        }
+    };
+
+    //Static class method
+    Interface.ensureImplements = function(object) {
+        if(arguments.length < 2) {
+            throw new Error("Function Interface.ensureImplements called with" + arguments.length + 
+            "arguments, but expected at least 2.");
+        }
+
+        for(var i = 1, len = arguments.length; i < len; i++) {
+            var interface = arguments[i];
+            if(interface.constructor != Interface) {
+                throw new Error("Function Interface.ensureImplements expected arguments two and"
+                    +"above to be instance of Interface.");
+            }
+
+            for(var j = 0, methodsLen = interface.methods.length; j < methodsLen; j++) {
+                var method = interface.methods[j];
+                if(!object[method] || typeof object[method] !== "function") {
+                    throw new Error("Function Interface.ensureImplements: object does not implement the "
+                + interface.name + "interface. Method " + method + " was not found.");
+                }
+            }
+        }
+    };
+
+    //用于继承的工具函数
+    function extend(subClass, superClass) {
+        var F = function() {};
+        F.prototype = superClass.prototype;
+        subClass.prototype = new F();
+        subClass.prototype.constructor = subClass;
+
+        subClass.superClass = superClass.prototype;
+        if(superClass.prototype.constructor == Object.prototype.constructor) {
+            superClass.prototype.constructor = superClass;
+        }
+    }
+
+    /* AjaxHandler interface. */
+
+    var AjaxHandler = new Interface('AjaxHandler', ['request', 'createXhrObject']);
+
+    /* SimpleHandler class. */
+
+    var SimpleHandler = function() {}; //implements AjaxHandler
+    SimpleHandler.prototype = {
+
+        request : function(method, url, callback, postVars) {
+            var xhr = this.createXhrObject();
+            xhr.onreadystatechange = function() {
+                if(xhr.readyState !== 4) return;
+                (xhr.status === 200) ?
+                    callback.success(xhr.responseText, xhr.responseXML) :
+                    callback.failure(xhr.status);
+            };
+            xhr.open(method, url, true);
+            if(method !== 'POST') postVars = null;
+            xhr.send(postVars);
+        },
+        createXhrObject : function() {
+            var methods = [
+                function() { return new XMLHttpRequest(); },
+                function() { return new ActiveXObject('Msxml2.XMLHTTP'); },
+                function() { return new ActiveXObject('Microsoft.XMLHTTP'); }
+            ];
+
+            for(var i = 0, len = methods.length; i < len; i++) {
+                try {
+                    methods[i]();
+                } catch(e) {
+                    continue;
+                }
+                //if we reach this point, methods[i] worked.
+                this.createXhrObject = methods[i]; //Memoize the method. 一次执行，记忆永存！！！
+                return methods[i];
+            }
+
+            //if we reach this point, none of the methods worked.
+            throw new Error('SimpleHandler : Could not create an XHR object.');
+        }
+
+    };
+
+    /* QueueHandler class. */
+
+    var QueueHandler = function() { //implements AjaxHandler
+        this.queue = [];
+        this.requestInProcess = false;
+        this.retryDelay = 5; //In seconds.
+    };
+    extend(QueueHandler, SimpleHandler);
+    QueueHandler.prototype.request = function(method, url, callback, postVars, override) {
+        if(this.requestInProcess && override) {
+            this.queue.push({
+                method   : method, 
+                url      : url,
+                callback : callback,
+                postVars : postVars
+            });
+        } else {
+            this.requestInProcess = true;
+            var xhr  = this.createXhrObject();
+            var that = this;
+            xhr.onreadystatechange = function() {
+                if(xhr.readyState !== 4) return;
+                if(xhr.status === 200) {
+                    callback.success(xhr.responseText, xhr.responseXML);
+                    that.advanceQueue();
+                } else {
+                    callback.failure(xhr.status);
+                    setTimeout(function() {
+                        that.request(method, url, callback, postVars, true);
+                    }, that.retryDelay * 1000);
+                }
+            };
+            xhr.open(method, url, true);
+            if(method !== 'POST') postVars = null;
+            xhr.send(postVars);
+        }
+    };
+    QueueHandler.prototype.advanceQueue = function() {
+        if(this.queue.length === 0) {
+            this.requestInProcess = false;
+            return;
+        }
+        var req = this.queue.shift();
+        this.request(req.method, req.url, req.callback, req.postVars, true);
+    };
+
+    /* OfflineHandler class. */
+
+    var OfflineHandler = function() { //implements AjaxHandler.
+        this.storedRequests = [];
+    };
+    extend(OfflineHandler, SimpleHandler);
+    OfflineHandler.prototype.request = function(method, url, callback, postVars) {
+        if(XhrManager.isOffline()) { //Store the requests until we are online.
+            this.storedRequests.push({
+                method   : method,
+                url      : url,
+                callback : callback,
+                postVars : postVars
+            });
+        } else {
+            this.flushStoredRequests();
+            OfflineHandler.superClass.request(method, url, callback, postVars);
+        }
+    };
+    OfflineHandler.prototype.flushStoredRequests = function() {
+        for(var i = 0, len = storedRequests.length; i < len; i++) {
+            var req = storedRequests[i];
+            OfflineHandler.superClass.request(req.method, req.url, req.callback, req.postVars);
+        }
+    }; 
+
+    /* XhrManager singleton. */
+
+    var XhrManager = {
+        createXhrHandler : function() {
+            var xhr;
+            if(this.isOffline()) {
+                xhr = new OfflineHandler();
+            } else if(this.isHighLatency()) {
+                xhr = new QueueHandler();
+            } else {
+                xhr = new SimpleHandler();
+            }
+
+            Interface.ensureImplements(xhr, AjaxHandler);
+            return xhr;
+        },
+        isOffline : function() { // Do a quick request with SimpleHandler and see if it succeeds.
+            //...
+        },
+        isHighLatency : function() { // Do a series of requests with SimpleHandler and time the responses.
+                                     // Best done once, as a branching function
+            //...                         
+        }
+    };
+
+    /* DisplayModule interface. */
+
+    var DisplayModule = new Interface('DisplayModule', ['append', 'remove', 'clear']);
+
+    /* ListDisplay class. */
+
+    var ListDisplay = function(id, parent) { //implements DisplayModule
+        this.list = document.createElement('ul');
+        this.list.id = id;
+        parent.appendChild(this.list);
+    };
+    ListDisplay.prototype = {
+        append : function(text) {
+            var newEl = document.createElement('li');
+            this.list.appendChild(newEl);
+            newEl.innerHTML = text;
+            return newEl;
+        },
+        remove : function(el) {
+            this.list.removeChild(el);
+        },
+        clear : function() {
+            this.list.innerHTML = '';
+        }
+    };
+
+    /* Configuration object. */
+
+    var conf = {
+        id : 'cnn-top-stories',
+        feedUrl : 'http://rss.cnn.com/rss/cnn_topstories.rss',
+        updateInterval : 60, //in seconds.
+        parent : $('#feed-readers');
+    }
+
+    /*
+     *  这些类都由FeedReader类组合使用，用XHR处理器从RSS源获取XML格式的数据并用一个内部方法对其进行解析
+     *  然后用显示模块将解析出来的信息输出到网页上
+    */
+
+    /* FeedReader class. */
+
+    var FeedReader = function(display, xhrHandler, conf) {
+        this.display    = display;
+        this.xhrHandler = xhrHandler;
+        this.conf       = conf;
+
+        this.startUpdate();
+    };
+    FeedReader.prototype = {
+        fetchFeed : function() {
+            var that = this;
+            var callback = {
+                success : function(text, xml) { that.parseFeed(text, xml); },
+                failure : function(status) { that.showError(status); }
+            };
+            //feed代理来解决js的同源安全策略，但是应该列出白名单防止代理被滥用！！！
+            this.xhrHandler.request('GET', 'feedProxy.php?feed='+ this.conf.feedUrl, callback);
+        },
+        parseFeed : function(responseText, responseXML) {
+            this.display.clear();
+            var items = responseXML.getElementsByTagName('item');
+            for(var i = 0, len = items.lenght; i < len; i++) {
+                var title = items[i].getElementsByTagName('title')[0];
+                var link  = items[i].getElementsByTagName('link')[0];
+                this.display.append('<a href="' + link.firstChild.data + '">' + title.firstChild.data + '</a>');
+            }
+        },
+        showError : function(statusCode) {
+            this.display.clear();
+            this.display.append('Error fetching feed.');
+        },
+        stopUpdates : function() {
+            clearInterval(this.interval);
+        },
+        startUpdates : function() {
+            this.fetchFeed();
+            var that = this;
+            this.interval = setInterval(function() {
+                that.fetchFeed();
+            }, this.conf.updateInterval * 1000);
+        }
+    };
+
+    /* FeedManager namespace. */
+    //先实例化所需要的模块，确认实现正确的方法，传递给FeedReader构造函数
+    var FeedManager = {
+        createFeedReader : function(conf) {
+            var displayModule = new ListDisplay(conf.id + '-display', conf.parent);
+            Interface.ensureImplements(displayModule, DisplayModule);
+
+            var xhrHandler = XhrManager.createXhrHandler();
+            Interface.ensureImplements(xhrHandler, AjaxHandler);
+
+            return new FeedReader(displayModule, xhrHandler, conf);
+        }
+    };
+
+</script>
+</body>
+</html>

@@ -1,0 +1,339 @@
+<html>
+<head>
+<meta charset="utf-8" /> 
+    <title>无标题</title>
+</head>
+<body>
+
+<div id="content">
+    content...
+</div>
+
+<script>
+    
+    // Selector
+    function $(selector) {
+        if(!!document.querySelector) {
+            return document.querySelector(selector);
+        } else {
+            return document.getElementById( selector.slice(1) ) || 
+                   document.getElementsByClassName( selector.slice(1) );
+        }
+    }
+    
+    //兼容性事件监听器
+    function addEvent(parent, ev, callback) {
+      if ( parent.addEventListener ) {
+        parent.addEventListener(ev, callback, false);
+      } else if ( parent.attachEvent ) {
+        parent.attachEvent(ev, callback);
+      } else {
+        parent['on'+ev] = callback;
+      }
+    }
+
+    /*   
+        Interface class.
+        @param name  {String}  interface name
+        @param method {Array}  interface methods array
+        @method ensureImplements 
+        
+    */
+
+    //Constructor
+    var Interface = function(name, methods) {
+
+        if(arguments.length != 2) {
+            throw new Error("Interface constructor called with" + 
+            arguments.length + "arguments, but expected exactly 2");
+        }
+
+        this.name = name;
+        this.methods = [];
+        for(var i = 0, len = methods.length; i < len; i++) {
+            if(typeof methods[i] !== "string") {
+                throw new Error("Interface constructor expects method names to be passed in as a string!");
+            }
+            this.methods.push(methods[i]);
+        }
+    };
+
+    //Static class method
+    Interface.ensureImplements = function(object) {
+        if(arguments.length < 2) {
+            throw new Error("Function Interface.ensureImplements called with" + arguments.length + 
+            "arguments, but expected at least 2.");
+        }
+
+        for(var i = 1, len = arguments.length; i < len; i++) {
+            var interface = arguments[i];
+            if(interface.constructor != Interface) {
+                throw new Error("Function Interface.ensureImplements expected arguments two and"
+                    +"above to be instance of Interface.");
+            }
+
+            for(var j = 0, methodsLen = interface.methods.length; j < methodsLen; j++) {
+                var method = interface.methods[j];
+                if(!object[method] || typeof object[method] !== "function") {
+                    throw new Error("Function Interface.ensureImplements: object does not implement the "
+                + interface.name + "interface. Method " + method + " was not found.");
+                }
+            }
+        }
+    };
+
+    //用于继承的工具函数
+    function extend(subClass, superClass) {
+        var F = function() {};
+        F.prototype = superClass.prototype;
+        subClass.prototype = new F();
+        subClass.prototype.constructor = subClass;
+
+        subClass.superClass = superClass.prototype;
+        if(superClass.prototype.constructor == Object.prototype.constructor) {
+            superClass.prototype.constructor = superClass;
+        }
+    }
+
+    /* AjaxHandler interface. */
+
+    var AjaxHandler = new Interface('AjaxHandler', ['request', 'createXhrObject']);
+
+    /* SimpleHandler class. */
+
+    var SimpleHandler = function() {}; //implements AjaxHandler
+    SimpleHandler.prototype = {
+
+        request : function(method, url, callback, postVars) {
+            var xhr = this.createXhrObject();
+            xhr.onreadystatechange = function() {
+                if(xhr.readyState !== 4) return;
+                (xhr.status === 200) ?
+                    callback.success(xhr.responseText, xhr.responseXML) :
+                    callback.failure(xhr.status);
+            };
+            xhr.open(method, url, true);
+            if(method !== 'POST') postVars = null;
+            xhr.send(postVars);
+        },
+        createXhrObject : function() {
+            var methods = [
+                function() { return new XMLHttpRequest(); },
+                function() { return new ActiveXObject('Msxml2.XMLHTTP'); },
+                function() { return new ActiveXObject('Microsoft.XMLHTTP'); }
+            ];
+
+            for(var i = 0, len = methods.length; i < len; i++) {
+                try {
+                    methods[i]();
+                } catch(e) {
+                    continue;
+                }
+                //if we reach this point, methods[i] worked.
+                this.createXhrObject = methods[i]; //Memoize the method. 一次执行，记忆永存！！！
+                return methods[i];
+            }
+
+            //if we reach this point, none of the methods worked.
+            throw new Error('SimpleHandler : Could not create an XHR object.');
+        }
+
+    };
+
+    /* QueueHandler class. */
+
+    var QueueHandler = function() { //implements AjaxHandler
+        this.queue = [];
+        this.requestInProcess = false;
+        this.retryDelay = 5; //In seconds.
+    };
+    extend(QueueHandler, SimpleHandler);
+    QueueHandler.prototype.request = function(method, url, callback, postVars, override) {
+        if(this.requestInProcess && override) {
+            this.queue.push({
+                method   : method, 
+                url      : url,
+                callback : callback,
+                postVars : postVars
+            });
+        } else {
+            this.requestInProcess = true;
+            var xhr  = this.createXhrObject();
+            var that = this;
+            xhr.onreadystatechange = function() {
+                if(xhr.readyState !== 4) return;
+                if(xhr.status === 200) {
+                    callback.success(xhr.responseText, xhr.responseXML);
+                    that.advanceQueue();
+                } else {
+                    callback.failure(xhr.status);
+                    setTimeout(function() {
+                        that.request(method, url, callback, postVars, true);
+                    }, that.retryDelay * 1000);
+                }
+            };
+            xhr.open(method, url, true);
+            if(method !== 'POST') postVars = null;
+            xhr.send(postVars);
+        }
+    };
+    QueueHandler.prototype.advanceQueue = function() {
+        if(this.queue.length === 0) {
+            this.requestInProcess = false;
+            return;
+        }
+        var req = this.queue.shift();
+        this.request(req.method, req.url, req.callback, req.postVars, true);
+    };
+
+    /* OfflineHandler class. */
+
+    var OfflineHandler = function() { //implements AjaxHandler.
+        this.storedRequests = [];
+    };
+    extend(OfflineHandler, SimpleHandler);
+    OfflineHandler.prototype.request = function(method, url, callback, postVars) {
+        if(XhrManager.isOffline()) { //Store the requests until we are online.
+            this.storedRequests.push({
+                method   : method,
+                url      : url,
+                callback : callback,
+                postVars : postVars
+            });
+        } else {
+            this.flushStoredRequests();
+            OfflineHandler.superClass.request(method, url, callback, postVars);
+        }
+    };
+    OfflineHandler.prototype.flushStoredRequests = function() {
+        for(var i = 0, len = storedRequests.length; i < len; i++) {
+            var req = storedRequests[i];
+            OfflineHandler.superClass.request(req.method, req.url, req.callback, req.postVars);
+        }
+    }; 
+
+    /* XhrManager singleton. */
+
+    var XhrManager = {
+        createXhrHandler : function() {
+            var xhr;
+            if(this.isOffline()) {
+                xhr = new OfflineHandler();
+            } else if(this.isHighLatency()) {
+                xhr = new QueueHandler();
+            } else {
+                xhr = new SimpleHandler();
+            }
+
+            Interface.ensureImplements(xhr, AjaxHandler);
+            return xhr;
+        },
+        isOffline : function() { // Do a quick request with SimpleHandler and see if it succeeds.
+            //...
+        },
+        isHighLatency : function() { // Do a series of requests with SimpleHandler and time the responses.
+                                     // Best done once, as a branching function
+            //...                         
+        }
+    }; // AjaxHandler end
+
+    /* DynamicProxy abstract class, incomplete. */
+
+/*    var DynamicProxy = function() {
+      this.args = arguments;
+      this.initialized = false;         
+    };
+    DynamicProxy.prototype = {
+      _initialize: function() {
+        this.subject = {}; //Instantiate the class.
+        this.class.apply(this.subject, this.args);
+        this.subject._proto_ = this.class.prototype;
+
+        var that = this;
+        this.interval = setInterval(function() { that._checkInitialization(); }, 100 );
+      },
+      _checkInitialization: function() {
+        if ( this._isInitialized() ) {
+          clearInterval(this.interval);
+          this.initialized = true;
+        }
+      },
+      _isInitialized: function() { //Must be implements in the subclass.
+        throw new Error('Unsupported operation on an abstract class.')
+      }
+    };*/
+
+    /* Dynamicproxy abstract class, complete. */
+
+    var Dynamicproxy = function() {
+      this.args = arguments;
+      this._initialized = false;
+
+      if ( typeof this.class != 'function' ) {
+        throw new Error('Dynamicproxy: the class attribute must be set before '+ 
+                        ' calling the superClass constructor.');
+      }
+
+      //Create the methods needed to implement the same interface.
+      for ( var key in this.class.prototype ) {
+        //Ensure that the properly is a function.
+        if ( typeof this.class.prototype[key] !== 'function' ) {
+          continue;
+        }
+        //Add the method.
+        var that = this;
+        (function( methodName ) {
+          that[methodName] = function() {
+            if ( !that.initialized ) {
+              return;
+            }
+            return that.subject[methodName].apply(that.subject, arguments);
+          };
+        })(key);
+      }  
+    };
+    Dynamicproxy.prototype = {
+      _initialize: function() {
+        this.subject = {}; //Instantiate the class.
+        this.class.apply(this.subject, this.args);
+        this.subject._proto_ = this.class.prototype;
+
+        var that = this;
+        this.interval = setInterval(function() { that._checkInitialization(); }, 100 );
+      },
+      _checkInitialization: function() {
+        if ( this._isInitialized() ) {
+          clearInterval(this.interval);
+          this.initialized = true;
+        }
+      },
+      _isInitialized: function() {
+        throw new Error('Unsupported operation:on an abstract class.');
+      }
+    };
+
+    //Usage
+
+    /* testProxy class. */
+
+    var TestProxy = function() {
+      this.class = TestClass;
+      var that = this;
+      addEvent( $('#test-link'), 'click', function() { that._initialize(); } ); //Init trigger.
+      TestProxy.superclass.constructor.apply(this, arguments);
+    };
+    extend(TestProxy, Dynamicproxy);
+    TestProxy.prototype._isInitialized = function() {
+      //... Init condition goes here...
+    };
+    /*
+     *  子类必须做四件事（1）将this.class设置为本体;
+     * （2）创建某种实例化触发器;
+     * （3）调用超类的构造函数（就像所有子类要做的那样）;
+     * （4）实现_isInitialized方法（它应该根据本体是否已经初始化返回true或false）;
+    **/
+
+
+</script>
+</body>
+</html>
