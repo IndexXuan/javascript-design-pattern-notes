@@ -1,0 +1,111 @@
+<html>
+<head>
+<meta charset="utf-8" /> 
+    <title>无标题</title>
+</head>
+<body>
+
+<script>
+
+
+     //Interface类
+    //下面是本书中使用的Interface类的定义：包括对参数及其类型进行了强制严格的检查！！！
+    //如果没有错误被抛出则可以确定接口得到了正确的声明和实现
+
+    //Constructor
+    var Interface = function(name, methods) {
+        if(arguments.length != 2) {
+            throw new Error("Interface constructor called with" + 
+            arguments.length + "arguments, but expected exactly 2");
+        }
+
+        this.name = name;
+        this.methods = [];
+        for(var i = 0, len = methods.length; i < len; i++) {
+            if(typeof methods[i] !== "string") {
+                throw new Error("Interface constructor expects method names to be passed in as a string!");
+            }
+            this.methods.push(methods[i]);
+        }
+    };
+
+    //Static class method
+    Interface.ensureImplements = function(object) {
+        if(arguments.length < 2) {
+            throw new Error("Function Interface.ensureImplements called with" + arguments.length + 
+            "arguments, but expected at least 2.");
+        }
+
+        for(var i = 1, len = arguments.length; i < len; i++) {
+            var interface = arguments[i];
+            if(interface.constructor != Interface) {
+                throw new Error("Function Interface.ensureImplements expected arguments two and"
+                    +"above to be instance of Interface.");
+            }
+
+            for(var j = 0, methodsLen = interface.methods.length; j < methodsLen; j++) {
+                var method = interface.methods[j];
+                if(!object[method] || typeof object[method] !== "function") {
+                    throw new Error("Function Interface.ensureImplements: object does not implement the "
+                + interface.name + "interface. Method " + method + " was not found.");
+                }
+            }
+        }
+    };
+
+
+    /* AjaxHandler interface. */
+
+    var AjaxHandler = new Interface('AjaxHandler', ['request', 'createXhrObject']);
+
+    /* simpleHandler class. */
+
+    var SimpleHandler = function() {}; //implements AjaxHandler
+    SimpleHandler.prototype = {
+
+        request : function(method, url, callback, postVars) {
+            var xhr = this.createXhrObject();
+            xhr.onreadystatechange = function() {
+                if(xhr.readyState !== 4) return;
+                (xhr.status === 200) ?
+                    callback.success(xhr.responseText, xhr.responseXML) :
+                    callback.failure(xhr.status);
+            };
+            xhr.open(method, url, true);
+            if(method !== 'POST') postVars = null;
+            xhr.send(postVars);
+        },
+        createXhrObject : function() {
+            var methods = [
+                function() { return new XMLHttpRequest(); },
+                function() { return new ActiveXObject('Msxml2.XMLHTTP'); },
+                function() { return new ActiveXObject('Microsoft.XMLHTTP'); }
+            ];
+
+            for(var i = 0, len = methods.length; i < len; i++) {
+                try {
+                    methods[i]();
+                } catch(e) {
+                    continue;
+                }
+                //if we reach this point, methods[i] worked.
+                this.createXhrObject = methods[i]; //Memoize the method. 一次执行，记忆永存！！！
+                return methods[i];
+            }
+
+            //if we reach this point, none of the methods worked.
+            throw new Error('SimpleHandler : Could not create an XHR object.');
+        }
+
+    };
+
+    var myHandler = new SimpleHandler();
+    var callback = {
+        success : function() { alert('Success : ' + responseText); },
+        failure : function() { alert('Failure : ' + statusCode); }
+    };
+    myHandler.request('GET', 'script.php', callback);
+
+</script>
+</body>
+</html>

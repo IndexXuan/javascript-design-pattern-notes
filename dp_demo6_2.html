@@ -1,0 +1,55 @@
+<html>
+<head>
+<meta charset="utf-8" /> 
+	<title>无标题</title>
+</head>
+<body>
+
+<div id='one'> 
+    <p id="test-1" style="display:none;">p1</p>
+    <p id="test-2" style="display:none;">p2</p>
+</div>
+
+<script>
+	        //Accessor without function callbacks: returning required data in accessors.
+        window.API = window.API || function() {
+            var name = 'hello world';
+            //Privileged mutator method.
+            this.setName = function(newName) {
+                name = newName;
+                return this;
+            };
+            //Privileged accessor method.
+            this.getName = function() {
+                //var name = 'bbb';
+                return name;
+            };  
+        };
+
+        //Implementation code.
+        var o = new API();
+        console.log(o.getName());
+        console.log(o.setName('xiaoxuan').getName());
+
+        //Accessor with function callbacks.
+        window.API2 = window.API2 || function() {
+            var name = 'Hello World';
+            //Privileged mutator method.
+            this.setName = function(newName) {
+                name = newName;
+                return this;
+            };
+            //Privileged accessor methods.
+            this.getName = function(callback) {
+                //chrome会在console系列函数上下文错误时报typeError错误，且console系列函数上下文必须console对象
+                callback.call(console, name); //此处原书写的是 this,name. 
+                return this;
+            };
+        };
+
+        //Implementation code.
+        var o2 = new API2();
+        o2.getName(console.log).setName('xiaoxuan').getName(console.log); 
+</script>
+</body>
+</html>

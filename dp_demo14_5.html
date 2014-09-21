@@ -1,0 +1,377 @@
+<html>
+<head>
+<meta charset="utf-8" /> 
+    <title>无标题</title>
+</head>
+<body>
+
+<div id="content">
+    content...
+</div>
+
+<script>
+    
+    // Selector
+    function $(selector) {
+        if(!!document.querySelector) {
+            return document.querySelector(selector);
+        } else {
+            return document.getElementById( selector.slice(1) ) || 
+                   document.getElementsByClassName( selector.slice(1) );
+        }
+    }
+    
+    //兼容性事件监听器
+    function addEvent(parent, ev, callback) {
+      if ( parent.addEventListener ) {
+        parent.addEventListener(ev, callback, false);
+      } else if ( parent.attachEvent ) {
+        parent.attachEvent(ev, callback);
+      } else {
+        parent['on'+ev] = callback;
+      }
+    }
+
+    /*   
+        Interface class.
+        @param name  {String}  interface name
+        @param method {Array}  interface methods array
+        @method ensureImplements 
+        
+    */
+
+    //Constructor
+    var Interface = function(name, methods) {
+
+        if(arguments.length != 2) {
+            throw new Error("Interface constructor called with" + 
+            arguments.length + "arguments, but expected exactly 2");
+        }
+
+        this.name = name;
+        this.methods = [];
+        for(var i = 0, len = methods.length; i < len; i++) {
+            if(typeof methods[i] !== "string") {
+                throw new Error("Interface constructor expects method names to be passed in as a string!");
+            }
+            this.methods.push(methods[i]);
+        }
+    };
+
+    //Static class method
+    Interface.ensureImplements = function(object) {
+        if(arguments.length < 2) {
+            throw new Error("Function Interface.ensureImplements called with" + arguments.length + 
+            "arguments, but expected at least 2.");
+        }
+
+        for(var i = 1, len = arguments.length; i < len; i++) {
+            var interface = arguments[i];
+            if(interface.constructor != Interface) {
+                throw new Error("Function Interface.ensureImplements expected arguments two and"
+                    +"above to be instance of Interface.");
+            }
+
+            for(var j = 0, methodsLen = interface.methods.length; j < methodsLen; j++) {
+                var method = interface.methods[j];
+                if(!object[method] || typeof object[method] !== "function") {
+                    throw new Error("Function Interface.ensureImplements: object does not implement the "
+                + interface.name + "interface. Method " + method + " was not found.");
+                }
+            }
+        }
+    };
+
+    //用于继承的工具函数
+    function extend(subClass, superClass) {
+        var F = function() {};
+        F.prototype = superClass.prototype;
+        subClass.prototype = new F();
+        subClass.prototype.constructor = subClass;
+
+        subClass.superClass = superClass.prototype;
+        if(superClass.prototype.constructor == Object.prototype.constructor) {
+            superClass.prototype.constructor = superClass;
+        }
+    }
+
+    /* AjaxHandler interface. */
+
+    var AjaxHandler = new Interface('AjaxHandler', ['request', 'createXhrObject']);
+
+    /* SimpleHandler class. */
+
+    var SimpleHandler = function() {}; //implements AjaxHandler
+    SimpleHandler.prototype = {
+
+        request : function(method, url, callback, postVars) {
+            var xhr = this.createXhrObject();
+            xhr.onreadystatechange = function() {
+                if(xhr.readyState !== 4) return;
+                (xhr.status === 200) ?
+                    callback.success(xhr.responseText, xhr.responseXML) :
+                    callback.failure(xhr.status);
+            };
+            xhr.open(method, url, true);
+            if(method !== 'POST') postVars = null;
+            xhr.send(postVars);
+        },
+        createXhrObject : function() {
+            var methods = [
+                function() { return new XMLHttpRequest(); },
+                function() { return new ActiveXObject('Msxml2.XMLHTTP'); },
+                function() { return new ActiveXObject('Microsoft.XMLHTTP'); }
+            ];
+
+            for(var i = 0, len = methods.length; i < len; i++) {
+                try {
+                    methods[i]();
+                } catch(e) {
+                    continue;
+                }
+                //if we reach this point, methods[i] worked.
+                this.createXhrObject = methods[i]; //Memoize the method. 一次执行，记忆永存！！！
+                return methods[i];
+            }
+
+            //if we reach this point, none of the methods worked.
+            throw new Error('SimpleHandler : Could not create an XHR object.');
+        }
+
+    };
+
+    /* QueueHandler class. */
+
+    var QueueHandler = function() { //implements AjaxHandler
+        this.queue = [];
+        this.requestInProcess = false;
+        this.retryDelay = 5; //In seconds.
+    };
+    extend(QueueHandler, SimpleHandler);
+    QueueHandler.prototype.request = function(method, url, callback, postVars, override) {
+        if(this.requestInProcess && override) {
+            this.queue.push({
+                method   : method, 
+                url      : url,
+                callback : callback,
+                postVars : postVars
+            });
+        } else {
+            this.requestInProcess = true;
+            var xhr  = this.createXhrObject();
+            var that = this;
+            xhr.onreadystatechange = function() {
+                if(xhr.readyState !== 4) return;
+                if(xhr.status === 200) {
+                    callback.success(xhr.responseText, xhr.responseXML);
+                    that.advanceQueue();
+                } else {
+                    callback.failure(xhr.status);
+                    setTimeout(function() {
+                        that.request(method, url, callback, postVars, true);
+                    }, that.retryDelay * 1000);
+                }
+            };
+            xhr.open(method, url, true);
+            if(method !== 'POST') postVars = null;
+            xhr.send(postVars);
+        }
+    };
+    QueueHandler.prototype.advanceQueue = function() {
+        if(this.queue.length === 0) {
+            this.requestInProcess = false;
+            return;
+        }
+        var req = this.queue.shift();
+        this.request(req.method, req.url, req.callback, req.postVars, true);
+    };
+
+    /* OfflineHandler class. */
+
+    var OfflineHandler = function() { //implements AjaxHandler.
+        this.storedRequests = [];
+    };
+    extend(OfflineHandler, SimpleHandler);
+    OfflineHandler.prototype.request = function(method, url, callback, postVars) {
+        if(XhrManager.isOffline()) { //Store the requests until we are online.
+            this.storedRequests.push({
+                method   : method,
+                url      : url,
+                callback : callback,
+                postVars : postVars
+            });
+        } else {
+            this.flushStoredRequests();
+            OfflineHandler.superClass.request(method, url, callback, postVars);
+        }
+    };
+    OfflineHandler.prototype.flushStoredRequests = function() {
+        for(var i = 0, len = storedRequests.length; i < len; i++) {
+            var req = storedRequests[i];
+            OfflineHandler.superClass.request(req.method, req.url, req.callback, req.postVars);
+        }
+    }; 
+
+    /* XhrManager singleton. */
+
+    var XhrManager = {
+        createXhrHandler : function() {
+            var xhr;
+            if(this.isOffline()) {
+                xhr = new OfflineHandler();
+            } else if(this.isHighLatency()) {
+                xhr = new QueueHandler();
+            } else {
+                xhr = new SimpleHandler();
+            }
+
+            Interface.ensureImplements(xhr, AjaxHandler);
+            return xhr;
+        },
+        isOffline : function() { // Do a quick request with SimpleHandler and see if it succeeds.
+            //...
+        },
+        isHighLatency : function() { // Do a series of requests with SimpleHandler and time the responses.
+                                     // Best done once, as a branching function
+            //...                         
+        }
+    }; // AjaxHandler end
+
+    /* Directory interface. */
+
+    var Directory = new Interface('Directory', ['showPage']);
+
+    /* PersonnelDirectory class, the Real Subject */
+
+    var PersonnelDirectory = function(parent) { //implements Directory
+      this.xhrHandler = XhrManager.createXhrHandler();
+      this.parent = parent;
+      this.data = null;
+      this.currentPage = null;
+
+      var that = this;
+      var callback = {
+        success: that._configure,
+        failure: function() {
+          throw new Error('PersonnelDirectory: failure in data retrieval.');  
+        }
+      };
+      xhrHandler.request('GET', 'directoryData.php', callback);
+    };
+    PersonnelDirectory.prototype = {
+      _configure: function(responseText) {
+        this.data = eval( '(' + responseText + ')' );
+        //...
+        this.currentPage = 'a';
+      },
+      showPage: function(page) {
+        $('page-' + this.currentPage).style.display = 'none';
+        $('page-' + page).style.display = 'block';
+        this.currentPage = page;
+      }
+    };
+    /*
+     *  该类的构造函数会发出一个XHR请求以获取员工数据。其_configure方法会在数据返回的时候被调用，它会生成HTML
+     *  元素并向其中填入数据（为简洁起见，该方法的大部分内容已被省略）。该类实现了一个目录应有的所有功能。那么
+     *  为什么还要使用代理那？原因在于，这个类在实例化过程中会加载大量数据，如果在网页加载的时候实例化这个类，
+     *  那么每一个用户都不得不加载这些数据，即使他根本不使用员工目录。代理的作用就是推迟这个实例化的过程。
+    */
+
+    /* DirectoryProxy class, just the outline. */
+
+/*    var DirectoryProxy = function(parent) { //implements Directory
+
+    };
+    DirectoryProxy.prototype = {
+      showPage: function(page) {
+        //...
+      }
+    };*/
+    //下一步是先这个类实现为一个无用的代理，它的每个方法所做的只是调用本体的同名的方法：
+
+    /* DirectoryProxy class, as useless proxy. */
+
+/*    var DirectoryProxy = function(parent) { //implements Directory
+      this.directory = new PersonnelDirectory(parent);
+    };
+    DirectoryProxy.prototype = {
+      showPage: function(page) {
+        return this.directory.showPage(page);  
+      }  
+    };*/
+
+    /*  现在这个代理可以代替PersonnelDirectory实例使用，它们可以透明的互换，不过，在此情况下你丝毫没有享受到虚拟
+     *  代理的好处，要想发挥虚拟代理的作用，需要创建一个 用来实例化本体的方法，并注册一个用来触发这个实例化过程的
+     *  事件监听器：
+    */
+
+    /* DirectoryProxy class, as a virtual proxy. */
+
+/*    var DirectoryProxy = function(parent) { //implements Directory
+      this.parent    = parent;
+      this.directory = null;
+      var that       = this;
+      addEvent(parent, 'mouseover', that._initialize); //Init trigger.
+    };
+    DirectoryProxy.prototype = {
+      _initialize: function() {
+        this.directory = new PersonnelDirectory(this.parent);
+      },
+      showPage: function(page) {
+        return this.directory.showPage(page);
+      }
+    };*/
+
+    /*
+     *  现在DirectoryProxy类的构造函数就不再是实例化本体，而是把这个工作推迟到_initialize中进行。我们注册了一个
+     *  事件监听器，作为这个方法的触发器。触发器的作用就是通知代理对象用户需要实例化其本体，它可以有许多实现选择。
+     *  在本例中，一旦用户把鼠标指针移到目录的父容器上方，本体就会被实例化。在更复杂的解决方案中，可以先为目录生
+     *  成用户界面，一旦表单域处于focus状态，它就会被初始化后的本体透明的取代。这个例子几乎完工，剩下的任务就是
+     *  提示用户当前目录正在生成一个加载员工目录并且在本体创建完毕时阻止任何方法的调用。
+     *
+    **/
+
+    /* DirectoryProxy class, with loading message. */
+
+    var DirectoryProxy = function(parent) { //implements Directory
+      this.parent = parent;
+      this.directory = null;
+      this.warning = null;
+      this.interval = null;
+      this.initialized = false;
+      var that = this;
+      //console.log('that.parent: '+ that.parent);
+      addEvent(parent, 'mouseover', that._initialize);
+    };
+    DirectoryProxy.prototype = {
+      _initialize: function() {
+        this.warning = document.createElement('div');        
+        //console.log('this: '+ this);
+        this.appendChild(this.warning); //原书为this.parent.appendChild(this.warning); 报错，this指向还是不扎实
+        //this.parent.innerHTML = 'a';
+        this.warning.innerHTML = 'The company directory is loading...';
+
+        this.directory = new PersonnelDirectory(this.parent);
+        var that = this;
+        this.interval = setInterval( function() { that._checkInitialization(); }, 100 );
+      },    
+      _checkInitialization: function() {
+        if ( this.directory.currentPage != null ) {
+          clearInterval(this.interval);
+          this.initialized = true;
+          this.parent.removeChild(this.warning);    
+        }
+      },
+      showPage: function(page) {
+        if ( !this.initialized ) {
+          return;
+        } 
+        return this.directory.showPage(page);
+      }
+    };
+
+    var dp = new DirectoryProxy( $('#content') );
+
+</script>
+</body>
+</html>
