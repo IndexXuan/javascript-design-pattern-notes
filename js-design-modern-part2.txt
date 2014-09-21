@@ -1,0 +1,799 @@
+@include ch04\ch05\ch06
+
+--- 2014 04 08 - 2014 04 09 ---
+第四章 : 继承 
+
+    引言:
+      在JavaScript中继承是个非常复杂的概念，比其他任何面向对象语言都复杂，在大多数语言中，继承一个
+    类只需要一个关键字就够了，但是JavaScript想要传承一个公用成员就需要采取一系列的措施，而且其具有
+    特色的基于原型链的继承方式也可以让我们既能经典继承，又可以更微妙的继承。
+
+    4.1  为什么需要继承
+        在设计类的时候，我们希望减少代码的重复性，并且尽量弱化对象之间的耦合，比如复制代码到各个地方
+        也可以实现代码复用，但是一旦业务修改，我们需要手动的一处一处的修改，假使我们有一个方法类，那么
+        只需要修改一个地方就可以了。当然，这只是继承的最简单的好处。
+
+    4.2  类式继承
+        /* class Person */
+
+        function Person(name) { //创建构造函数，惯例其名称就是类名
+            this.name = name;
+        }
+
+        Person.prototype.getName = function() { //类的方法被添加到其prototype对象中
+            return this.name;
+        }
+
+        var reader = new Person('Pengrui'); //创建类的实例就只需一个new关键字
+        reader.getName();
+
+        /* 创建Author类继承Person */
+
+        /* Class Author */
+
+        function Author(name, books) {
+            Person.call(this, name); //Call the superclass's constructor in the scope of this
+            this.books = books; //Add an attribute to Author
+        }
+
+        Author.prototype = new Person(); //Set up the prototype chain
+        Author.prototype.constructor = Author; //Set the constructor attribute to Author
+        Author.prototype.getBooks = function() { //Add a method to Author
+            return this.books;
+        };
+
+      4.2.2 自制工具函数 extends
+        /* Extend function */
+
+        function extend(subClass, superClass) {
+            var F = function() {}; 
+            F.prototype = superClass.prototype;
+            subClass.prototype = new F();
+            subClass.prototype.constructor = subClass; //重定向子类Constructor
+        }
+        //改进之举：设置空函数，并将用它创建的一个对象实例插入原型链中，避免创建超类的实例，因为它可能会很庞大，
+        而且有时候超类的构造函数有一些副作用，或者会执行一些需要进行大量工作的计算任务。
+
+        /* class Person */
+
+        function Person(name) {
+            this.name = name;
+        }
+
+        Person.prototype.getName = function() {
+            return this.name;
+        }
+
+        /* Class Author */
+
+        function Author() {
+            Person.call(this, name); //bad Person was fixed here. not flexiable
+            this.books = books;
+        }
+        extends(Author, Person); //Author extends Person
+
+        Author.prototype.getBooks = function() {
+            return this.books;
+        };
+
+        /* Extend function, improved. */
+    
+        function extend(subClass, superClass) {
+            var F = function() {};
+            F.prototype = superClass.prototype;
+            subClass.prototype = new F();
+            subClass.prototype.constructor = subClass;
+
+            subClass.superClass = superClass.prototype;
+            if(superClass.prototype.constructor == Object.prototype.constructor) {
+                superClass.prototype.constructor = superClass;
+            }
+        }
+        //提供了superClass属性，这个属性可以用来弱化Author与Person之间的耦合，该函数的前面4行与前一版本的
+        相同，最后三行则用代码用来确保超类的constructor属性已被正确设置(即使超类就是Object类本身)，在用新的
+        superClass类属性调用超类的构造函数时这个问题很重要：
+        /* Class Author */
+
+        function Author(name, books) {
+            Author.superclass.constructor.call(this, name);
+            this.books = books;
+        }
+        extend(Author, Person);
+
+        Author.prototype.getBooks = function() {
+            return this.books;
+        };
+        有了superclass属性，就可以直接调用超类中的方法。这在既要重定义超类的某个方法而又想访问其在超类中
+        的实现时可以派上用场。例如，为了用了一个新的getName方法重定义Person类中的同名方法，你可以先用
+        Author.superclass.getName获得作者的名字，然后在此基础上添加其他信息：
+            Author.prototype.getName = function() {
+                var name = Author.superclass.getName().call(this);
+                return name + ',Author of ' + this.getBooks().join(', ');
+            };
+
+    4.3  原型式继承
+    
+        /* Person prototype Object */
+
+        var Person = {
+            name    : 'default name',
+            getName : function() {
+                return this.name;
+            }
+        };
+
+        var reader = clone(Person); //创建一个空对象，且原型对象被设置为Person
+        console.log(reader.getName());
+        reader.name = 'xiaoxuan';
+        console.log(reader.getName());
+
+        /* Author prototype Object */
+
+        var Author = clone(Person);
+        Author.books = []; //default value
+        Author.getBooks = function() {
+            return this.books;
+        };
+
+      4.3.1  对继承而来的成员的读和写的不对称性
+        如果还未对子对象设置值的话，那么
+            读出的值为原型对象的初值
+            写入却是直接对子对象本身
+        这也就是为什么总是应该对引用传递的属性创建新副本，通常是创建空字面量
+        相关的用hasOwnProperty方法来区分对象的实际成员和它继承而来的成员
+
+        又比如：一个对象本身就存在子对象，例如
+        var CompoundObject = {
+            string1 : 'default value',
+            childObject : {
+                bool : true,
+                num  : 10
+            }
+        };
+        var compoundObjectClone = clone(CompoundObject);
+
+        //很可能会改变内部值 Bad!!!
+
+        /* 此问题的最佳实践 */
+
+        var CompoundObject = {};
+        CompoundObject.string1 = 'default value';
+        CompoundObject.createChildObject = function() {
+            return {
+                bool : true,
+                num  : 10
+            }
+        };
+        compoundObject.childObject = CompoundObject.createChildObject();
+
+        var compoundObjectClone = clone(CompoundObject);
+        compoundObjectClone.childObject = CompoundObject.createChildObject();
+        compoundObjectClone.childObject.num = 5;
+
+        /* 上述使用的工具函数clone()闪亮登场 */
+
+        function clone(object) {
+            function F() {}
+            F.prototype = object;
+            return new F; //等价于 return new F();
+        }
+        //首先创建了一个空函数F，然后将prototype属相设置为参数object传入的原型对象，prototype就是用来指向
+        原型对象的，通过原型链机制，它提供了所有继承而来的成员的链接，该函数最后通过把new运算符作用于F创建出
+        一个新对象，然后把这个对象作为返回值返回，函数所返回的这个克隆结果是一个以给定对象为原型对象的空对象。
+
+    4.4  类式继承和原型继承的对比
+        大多数人对类式继承更加熟悉这是不争的事实，所以如果设计一个供大多数人使用的API或者和不熟悉原型继承的
+        人合作，那么最好使用类是继承。但是，原型继承自有其优势，比如更加节省内存，除非你为每个克隆的对象设置
+        了属性和方法，克隆对象们总是共享同一份实例，而且通过工具函数clone()，整个继承过程更加简单，最后，任何
+        高级JavaScript程序员最终都必须了解并且熟练使用原型继承及其机制！
+
+    4.5  继承与封装
+        此处不再赘述...
+
+    4.6  掺元素:不必每个类都继承一个包含常用方法的类，只需将其共享即可，这样也实现了多继承（多个父类）  
+    
+        /* Mixin class */
+
+        var Mixin = function() {};
+        Mixin.prototype = {
+            serialize : function() {
+                var output = [];
+                for(key in this) {
+                    output.push(key + ': ' + this[key]);
+                }
+                return output.join(', ');
+            }
+        };
+
+        augment(Author, Mixin);
+
+        var author = new Author('Xiaoxuan', ['JavaScript Design Patterns']);
+        var serializedString = author.serialize();
+
+        /* 神奇好用的工具函数 augment */
+
+        function augment(receivingClass, givingClass) {
+            for(methodName in givingClass.prototype) {
+                if(!receivingClass.prototype[methodName]) {
+                    receivinngClass.prototype[methodName] = givingClass.prototype[methodName];
+                }
+            }
+        }          
+
+        /* 神奇好用的工具函数 augment 改进版 可以Mixin特定方法，不一定全部 */
+
+        function augment(receivingClass, givingClass) {
+            if(arguments[2]) { //Only giving certain methods.
+
+                for(var i = 2,len = arguments.length; i < len; i++) {
+                    receivingClass.prototype[arguments[i]] = givingClass.prototype[arguments[i]];
+                }
+
+            } else { //giving all methods.
+
+                for(methodName in givingClass.prototype) {
+                    if(!receivingClass.prototype[methodName]) {
+                        receivinngClass.prototype[methodName] = givingClass.prototype[methodName];
+                    }
+                }
+
+            }
+        }   
+
+        /* Usage */
+        augment(Author, Mixin, 'serialize');
+
+    4.7*  就地编辑API设计(点击文字变为文本框，用户可就地编辑，分别使用三种继承方式) 非常好的一个例子
+    
+        (1)  类式继承
+        /* EditInPlaceField class */
+
+        见dp_demo4_1, dp_demo4_2   
+
+        (2)  原型式继承解决方案
+
+        见dp_demo4_3
+
+        (3)  掺元类解决方案
+
+        见dp_demo4_4
+
+        见dp_demo4
+
+    4.8  继承的使用场合
+
+        继承会使代码更加复杂，更难被JavaScript新手理解，所以只应该用在它能带来好处胜过缺点的地方。它的好处
+        表现在代码重用方面。通过建立类或对象之间的继承关系，有些方法我们只需要定义一次，同样，如果修改这些
+        方法或排查其中错误，那么由于其定义在一个位置，所以方便很多。
+
+        各种继承都有其优缺点，在内存效率上比较重要的场合原型式继承（及clone函数）是最佳选择，熟悉其他面向对象
+        语言的程序员可以使用类式继承，并且在两者中搭配使用Mixin，事半功倍！
+
+        比较简单的JavaScript程序很少需要用到这种程度的抽象，只有比较大型比且很多程序员参与的项目才需要这样。 
+
+--- 2014 04 10 - 2014 04 12 ---
+第五章 : 单体模式
+
+    单体(singleton)模式是JavaScript中最基本但又是最有用的模式之一，它可以比其他任何模式都更常用。这种模式
+    提供了一种将代码组织为一个逻辑单元的手段，这种逻辑单元中的代码可以通过单一的变量进行访问，通过确保单体
+    对象只存在一份实例，你就可以确信自己的所有代码使用的都是同样的全局资源。
+
+    单体类在JavaScript中有许多用途。他们可以用来划分命名空间，以减少网页中全局变量的数目。它们还可以在一种
+    名为分支(branching)的技术中用来封装浏览器之间的差异(借助分支技术)，你可以把代码组织得更为一致，从而使其
+    更容易阅读和维护。
+
+    这种模式在JavaScript中非常重要，也许比在其他语言中更重要，在网页中使用全局变量有很大的风险，而用单体模式
+    创建的命名空间则是清除这些全局变量的最佳手段之一。仅此一个原因就该掌握这种模式，更别说还有很多别的用途！
+
+    5.1  单体的基本结构
+        较高级的单体模式我们和还是放到后面讲，这里先讨论最基本的类型。最简单的单体实际上就是对象字面量，它有
+        一批有一定关联的方法和属性组织在一起：
+
+        /* Basic Singleton. */
+
+        var Singleton = {
+            attribute1 : true,
+            attribute2 : 10,
+
+            method1 : function() {
+              //...
+            },
+
+            method2 : function() {
+              //...
+            }
+        };
+        //在这个实例中，所有成员变量和方法都可以通过Singleton来访问，可以使用圆点运算符:
+        Singleton.attribute1 = false;
+        var total = Singleton.attribute2 + 5;
+        var result = Singleton.method1();
+
+        /*
+         * 单体创建后可以修改其属性和方法，这其实违背了面向对象的设计，JavaScript的对象都是易变的
+         * 而且无法阻止(闭包除外)。
+         * 并非每个对象字面量都是单体，如果只是模仿关联数组，那就不是。而如果是组织属性和方法，那就是。
+        */
+
+    5.2  划分命名空间
+        单体由两部分组成，包含着属性和方法的对象本身以及用于访问它的变量(通常是全局的),以便在全局可以访问它
+        这是单体模式的要点。只有这个全局变量可以访问单体内的属性和方法，可以这么说，这些属性和方法都被圈在
+        这个命名空间里了。命名空间是JavaScript编程的一个重要工具，我们很容易一不留神就重写了一些重要方法，
+        这造成的命名冲突恶果我们完全可以用命名空间来避免。甚至我们有时会面临别人的代码，插件、库等等，很容易
+        就出现冲突造成困惑，所以有时我们可以给自己的所有代码用上全局封装，模块化。
+
+    5.3  用作特定网页专用代码的包装器的单体
+        
+        /* Generic Page Object */
+
+        Namespace.PageName = {
+
+            //Page contants.
+            CONSTANT_1 : true,
+            CONSTANT_2 : 10,
+
+            //Page methods.
+            method1 : function() {
+                //...
+            },
+
+            //Initialization method.
+            init : function() {
+                //...init here.
+            }
+        }
+
+        //Invoke the initialization method after the page loads.
+        addLoadEvent(Namespace.PageName.init);
+
+        /*  
+         *  我们用一个在web中很常用的用法，我们经常要用JavaScript为表单添加功能。出于平稳退化方面的考虑
+         *  通常先创建一个不依赖JavaScript的、使用普通提交机制完成任务的纯HTML网页，然后用JavaScript控制
+         *  表单的行为，提供一些额外的特性:  
+        */
+
+        见dp_demo5_1
+
+    5.4  拥有私用成员的单体
+    
+        (1)  用下划线表示法
+
+        (2)  使用闭包 (这种模式叫做单体模式，又叫做模块模式，指把相关属性方法组织为模块并划分命名空间)
+
+        var Xx = window.Xx || {}; //定义字面量
+
+        /*
+         *  此方法和对象字面量扩充法不同在于可以用闭包实现真正的私用成员
+         *  任何声明在这个匿名函数内(但不是在那个对象字面量中)的属性和方法都只能被同一个闭包中声明的其他
+         *  函数访问。可以区分公用和私用成员
+         *  这些闭包在匿名函数执行过后仍然存在，所以声明在其中的函数和方法总能从匿名函数所返回的对象内部访问
+        */
+
+        Xx.module1 = (function() { //立即执行函数在创建模块时很实用
+
+            //private members.
+            var privateAttribute1 = '';
+            var privateAttribute2 = '';
+
+            var privateMethod1 = function() {
+                //...
+            }
+            var privateMethod2 = function() {
+                //...
+            }
+
+            //public members.           
+            return {
+                
+                publicAttribute1 : '',
+                publicAttribute2 : '',
+
+                publicMethod1 : function() {
+                    //...
+                },
+                publicMethod2 : function() {
+                    //...
+                }
+
+            };
+
+        })(); //end of Xx.module1
+
+    5.5  惰性实例化
+
+            前面所讲的单体模式的各种实现方式有一个共同点，单体对象都是在脚本加载后被创建出来，对于资源密集型的
+        或者配置开销甚大的单体，也许更合理的做法是将其实例化推迟到需要使用它的时候，这种技术被称为------------
+        "惰性加载"(lazy loading),他最常用于那些必须加载大量数据的单体而那些被用作命名空间、特定网页专用代码包装
+        器或组织相关实用方法的工具的单体最好还是立即实例化。
+
+            这种惰性加载单体的特别之处在于，对他们的访问必须借助于一个静态方法。应该这样调用其方法：
+        Singleton.getInstance().methodName(),而不是这样调用：Singleton.method()。getInstance方法会检查单体是否
+        已经被实例化。如果还没有，那么它将创建并返回其实例。如果单体已经实例化，那么它将返回现有实例。下面我们
+        从前面那个拥有真正的私用成员的单体的基本框架出发示范一下如何把普通单体转化为惰性加载单体：
+
+        /* Singleton with Private Members */
+
+        MyNamespace.Singleton = (function() {
+            //private members.
+            var privateAttribute1 = false;
+            var privateAttribute2 = [1, 2, 3];
+
+            function privateMethod1() {
+                //...
+            }
+            function privateMethod2(args) {
+                //...
+            }
+
+            //public members.
+            return {
+                
+                publicAttribute1 : true,
+                publicAttribute2 : 10,
+
+                publicMethod1 : function() {
+                    //...
+                },
+                publicMethod2 : fucntion() {
+                    //...
+                }
+
+            };
+        })();
+
+        <------------------- 接下来进行神奇的转换 ------------------->
+
+        /* General skeleton for a lazy loading singleton, step 1. */
+
+        MyNamespace.Singleton = (function() {
+
+            var uniqueInstance; //Private attribute that holds the single instance.
+
+            function constructor() { //All of the normal singleton code goes here 
+                var Attribute1 = false;
+                var Attribute2 = [1, 2, 3];
+
+                function Method1() {
+                    //...
+                }
+                function Method2(args) {
+                    //...
+                }
+            }
+
+            return {
+                getInstance : function() {
+                    if(!uniqueInstance) { //Instantiate only if the instance doesn't exist
+                        uniqueInstance = constructor();
+                    }
+                    return uniqueInstance;
+                }
+            };
+
+        })();
+        //调用方法也要跟着修改
+        MyNamespace.Singleton.getInstance().Method();
+
+    5.6  分支
+            分支(branching)是一种用来把浏览器间的差异封装到在运行期间进行设置的动态方法中的技术。举个例子来说，
+        假设我们需要创建一个返回XHR对象的方法，这种XHR对象在大多数浏览器中是XMLHttpRequest类的实例，在IE早期
+        版本中则是某种ActiveX类的实例，这样一个方法通常会进行浏览器嗅探或者对象探测。如果不使用分支技术，那么
+        每次调用这个方法时，所有那些浏览器嗅探代码都要再运行。要是这个方法的调用很频繁，那么这样会严重缺乏效率。
+            更有效的做法就是只在脚本加载时一次性的确定针对特定浏览器的代码，这样一来，在初始化完成之后，每种浏
+        览器都只会针对他的JavaScript实现而设计的代码，能够运行时动态确定函数代码的能力，正是JavaScript的高度灵
+        活性和强大表现的一种体现，这种类型的优化很容易理解，它能提高调用这些函数的效率。
+            例如分支技术实现XHR对象
+
+        /* singleXhrFactory singleton  */
+
+        var SingleXhrFactory = (function() {
+
+            //three branches
+            var standad = {
+                createXhrObject : function() {
+                  return new XMLHttpRequest();
+            };
+            var activeXNew = {
+                createXhrObject : function() {
+                  return new ActiveXObject('Msxml2.XMLHTTP');
+            };
+            var activeXOld = {
+                createXhrObject = function() {
+                  return new ActiveXObject('Microsoft.XMLHTTP');
+            };
+
+            //to assign the branch, try each method;return whatever dosen't fail.
+            var testObject;
+            try {
+
+                testObject = standard.createXhrObject();
+                return standard; //Return this if no error was thrown.
+
+            } catch(e) {
+
+                try {
+                    testObject = activeXNew.createXhrObject();
+                    return activeXNew; //Return this if no error was thrown.
+                } catch(e) {
+
+                    try {
+
+                        testObject = activeXOld.createXhrObject();
+                        return activeXOld;
+
+                    } catch(e) {
+                        throw new Error('No Xhr Object found in this environment.');
+                    }
+
+                }
+
+            }
+
+        })();   // 类似多态性， 运行时多态
+        //用了分支技术后，所有这些特性嗅探都只会执行一次，而不是每生成一个对象就要执行一次，这是一种非常有效的
+        //技术，它适用于任何只有在运行时才能确定具体实现的情况，接下来工厂模式还会再说这方面的话题。
+
+    5.8  单体模式的适用场合
+
+        从为代码提供命名空间到增强其模块性这个角度来说，应该尽量多使用单体模式，是JavaScript中最有效的模式之一
+        几乎适用于所有大大小小的项目，
+            在简单的快餐性项目中，我们可以创建命名空间，将代码组织在一个全局变量下。
+            稍大些的项目，单体可以把相关代码组织起来，以便日后维护，或者把数据和代码安置在一个众所周知的单一位置
+            大型项目中，可以起到优化作用，那些开销较大却又很少用的组件包装在惰性加载单体中，特定代码组织在分支中
+
+        单体在JavaScript中尤为重要，远远超过它在其他语言中的重要性，因为JavaScript中的全局变量非常危险！！！
+        
+    5.9  单体模式之利
+
+            单体模式只要好处就是对代码的组织，把相关属性和方法组织在一个不会被多次实例化的单体中，可以使代码的
+        调试和维护变得轻松，描述性的命名空间还可以增强代码的自我说明性，有利于新手的阅读与理解。把方法包装在单体
+        中，可以房子他们被其他程序员误改，还可以防止全局命名空间被一大推变量弄得一团糟，单体可以把你的代码与第三
+        方代码很好的隔离开来，从而在整体上提高网页的稳定性。
+            单体模式的一些高级变体可以在开发周期后期对脚本进行优化，提升其性能，使用惰性实例化技术，可以直接需要
+        对象时再加载，减少不使用那个变量的用户的带宽和内存。通过运行时的条件确定赋给单体变量的对象字面量，你可以
+        创建出为特定环境量身定制的方法，这种方法不会在每次调用时都再浪费时间去检查运行环境。
+
+    5.10 单体模式之弊
+
+            由于单体模式提供的是一种单点访问，所以它有可能导致模块间的强耦合，这是这种模式受到的主要批评，这个
+        批评也很中肯，有时创建一个可实例化的类更为可取，哪怕它只会被实例化一次。单体模式的强耦合也不利于单元测试，
+        单体最好还是留给定义命名空间和实现分支。当然以后的学习还会见识到更多好的模式，只有在恰当的时候用起来才是
+        真重要的！！！
+
+    5.11 小节
+
+            创建可重用的模块化代码。寻求组织和说明代码的各种方法，创建可被大众使用的API才是最终目标。做一个值得
+        信赖的高级JavaScript程序员！！！   
+
+--- 2014 04 13 ---
+第六章 : 方法的链式调用  流行的JS库大多采用
+
+    6.0  前言   
+
+        本章研究的是JavaScript对方法进行链式调用的能力。应用程序开发人员可以使用一些简单的技术来改进自己的代码
+    编写工作。你可以写一些函数来处理各种常见的任务，以节省时间，也可以改进一下代码的实现方式，最后，你可以把链
+    式调用用在自减所写的整个JavaScript库，把自己喜欢的方法连起来调用。
+
+        例子:  
+        //without chaining
+        addEvent($('example'), 'click', function() {
+            setStyle(this, 'color', 'green');
+            show(this); 
+        });
+
+        //with chaining
+        $('example').addEvent('click', function() {
+            $(this).setStyle('color', 'green').show();
+        });   
+
+    6.1  调用链的结构
+
+        (function() {
+            //Use a private class.
+            function _$(els) {
+                this.elements = [];
+                for(var i = 0, len = els.length; i < len; ++i) {
+                    var element = els[i];
+                    if(typeof element === 'string') {
+                        element = document.getElementById(element);
+                    }
+                    this.elements.push(element);
+                }
+            }
+
+            _$.prototype = {
+                each : function(fn) {
+                    for(var i = 0, len = this.elements.length; i < len; ++i) {
+                        fn.call(this, this.elements[i]);
+                    }
+                    return this;
+                },
+                setStyle : function(prop, val) {
+                    this.each(function(el) {
+                        el.style[prop] = val;
+                    });
+                    return this;
+                },
+                show : function() {
+                    var that = this;
+                    this.each(function(el) {
+                        that.setStyle('display', 'block');
+                    });
+                    return this;
+                },
+                addEvent : function(type, fn) {
+                    var add = function(fn) {
+                        if(window.addEventListener) {
+                            el.addEventListener(type, fn, false);
+                        } else if(window.attachEvent) {
+                            el.attachEvent('on'+type, fn);
+                        }
+                    };
+                    this.each(function(el) {
+                        add(el);
+                    });
+                    return this;
+                }
+            };
+
+            //The public interface remains the same.
+            window.$ = function() {
+                return new _$(arguments);
+            };
+        })();
+    
+        /* Usage */
+        $(window).addEvent('load', function() {
+            $('test-1').show().
+                setStyle('color', 'green').
+                addEvent('click', function(e) {
+                    $(this).setStyle('color', 'red');
+                });
+        })
+
+    6.2  设计一个支持方法链式调用的JavaScript库
+
+            前面的$函数的改造只提供了对几种常见的使用函数进行链式调用的支持，但是你可以尽情对其扩充。设计一个
+        JavaScript库需要深思熟虑，一个库不一定需要成百上千行代码，它的功能决定了它的大小，你可以借鉴一个各种
+        JavaScript库中包含的最常用的特性，如图：
+
+        特性    说明
+        事件    添加和删除事件监听器，对事件对象进行规范化处理
+        DOM     类名管理，样式管理
+        Ajax    对XMLHttpRequest进行规范化处理
+
+        Function.prototype.method = function(name, fn) {
+            this.prototype[name] = fn;
+            return this;
+        };
+        (function() {
+            function _$(els) {
+                //...
+            }
+            /*
+                Events
+                *  addEvent
+                *  getEvent
+            */
+            _$.method('addEvent', function(type, fn) {
+                //...
+            }).method('getEvent', function(e) {
+                //...
+            }).
+            /*
+                DOM
+                *  addClass
+                *  removeClass
+                *  replaceClass
+                *  hasClass
+                *  getStyle
+                *  setStyle
+            */
+            method('addClass', function() {
+                //...
+            }).method('removeClass', function() {
+                //...
+            }).method('replaceClass', function() {
+                //...
+            }).method('hasClass', function() {
+                //...
+            }).method('getStyle', function() {
+                //...
+            }).method('setStyle', function() {
+                //...
+            }).
+            /*
+                Ajax
+                *  load. Fetches an HTML fragment from a URL and inserts it into an element.
+            */
+            method('load', function(uri, method) {
+                //...
+            });
+            window.$ = function() {
+                return new _$(arguments);
+            };
+        })(); 
+
+        //搭建好这个API的架子之后，现在该着重考虑的就是它的使用着可能是些什么人，有可能造成冲突，所以最好的
+        //办法就是添加一个安装器(installer)
+
+        Function.prototype.method = function(name, fn) {
+            //...
+        };
+        (function() {
+            function _$(els) {
+                //...
+            }
+            _$.method('addEvent', function(type, fn) {
+                //...
+            });
+
+            window.installHelper = function(scope, interface) {
+                scope[interface] = function() {
+                    return new _$(arguments);
+                }
+            };
+        })();
+
+        //用户可能会这样使用它：
+        installHelper(window, '$');
+
+        $('example').show();
+
+        //下面是个更复杂的例子，它演示了如何把这种功能添加到一个事先定义好的命名空间对象中：
+
+        //Define a namespace without overwriting it if it already exists.
+        window.com = window || {};
+        com.example = com.example || {};
+        com.example.util = com.example.util || {};
+
+        installHelper('com.example.util', 'get');
+
+        (function() {
+            var get = com.example.util.get;
+            get('example').addEvent('click', function() {
+                get(this).addClass('hello');
+            });
+        })();
+
+    6.3  使用回调从支持链式调用的方法获取数据  
+
+        //有时我们并不想每个函数都为了能链式返回this对象，比如取值器get函数，所以我们可以用回调技术返回
+        //所要的数据，下面的例子用了普通方法和回调方法
+
+        //Accessor without function callbacks: returning required data in accessors.
+        window.API = window.API || function() {
+            var name = 'hello world';
+            //Privileged mutator method.
+            this.setName = function(newName) {
+                name = newName;
+                return this;
+            };
+            //Privileged accessor method.
+            this.getName = function() {
+                return name;
+            };  
+        };
+
+        //Implementation code.
+        var o = new API();
+        console.log(o.getName());
+        console.log(o.setName('xiaoxuan').getName());
+
+        //Accessor with function callbacks.
+        window.API2 = window.API2 || function() {
+            var name = 'Hello World';
+            //Privileged mutator method.
+            this.setName = function(newName) {
+                name = newName;
+                return this;
+            };
+            //Privileged accessor methods.
+            this.getName = function() {
+                callback.call(console, name);
+                return this;
+            };
+        };
+
+        //Implementation code.
+        var o2 = new API2();
+        o2.getName(console.log).setName('xiaoxuan').getName(console.log); //纯链式，究极写法，牛逼！！！  

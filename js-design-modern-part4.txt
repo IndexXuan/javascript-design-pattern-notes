@@ -1,0 +1,766 @@
+@include ch10\ch11\ch12
+
+--- 2014 0512 - 2014 0512，2014 0524 - 2014 0525 --
+第十章 : 门面模式
+
+    门面模式有两个作用：一是简化类的接口；二是消除类与使用它的客户代码之间的耦合。在JavaScript中，门面模式常常是开
+    发者最亲密的朋友。它是几乎所有JavaScript库的核心原则。通过创建一些便利的方法让复杂系统变得简单易用，门面模式可
+    以使库提供的工具更容易理解，使用这个模式，程序员可以间接地与一个子系统打交道，与直接访问子系统相比，这样做更不
+    容易出错。
+
+    门面模式简化了诸多错误记录或跟踪页面试图统计数据这类常用的或重复性的任务。通过添加一些便利方法（这种方法是对原
+    有的一些方法的组合利用），它还可以让对象的功能显得更加完善。
+
+    简化复杂接口，可以在幕后为你进行错误检查、清除不再需要的大对象，以及用一种更加容易的方式展示对象的功能。
+
+    门面模式并非必不可少。同样的任务不用它也能完成。这是一种组织模式。他可以用来修改类和对象的接口，使其更便于使
+    用。它可以让程序员过得更轻松，使他们的代码变得更容易管理。
+
+    10.1
+
+    例子：
+    function addEvent(el, type, fn) {
+        if(window.addEventListener) {
+            el.addEventListener(type, fn, false);
+        } else if(window.attachEvent) {
+            el.attachEvent('on' + type, fn);
+        } else {
+            el['on' + type] = fn;
+        }
+    } //精心设计的API来包装不同意或不友好的API
+
+    10.2  JavaScript库的门面性质
+
+    创建自己的工具函数
+
+    10.3  用作便利方法的门面元素
+    
+    //例子
+    function a(x) {
+        //do some stuff here...
+    }  
+
+    function b(y) {
+        //do some stuff here...
+    }
+
+    function ab(x, y) {
+        a(x);
+        b(y);
+    }
+
+    var DED = window.DED || {};
+    DED.util = {
+        stopPropagation : function(e){
+            if(e.stopPropagation()) {
+                //W3C interface.
+                e.stopPropagation();
+            } else {
+                //IE interface.
+                e.cancelBubble();
+            }
+        },
+        preventDefault : function(e) {
+            if(e.perventDefault()) {
+                //W3C interface.
+                e.preventDefault();
+            } else {
+                //IE interface.
+                e.returnValue = false;
+            }
+        },
+        /* our convenience method */
+        stopEvent : function(e) {
+            DED.util.stopPropagation(e);
+            DED.util.prevenetDefault(e);
+        }
+    };
+    /* 
+      尽管看起来很像，但门面模式并不是适配器模式。适配器（第11章将会详解）是一种包装器，用来对接口包装以便在不兼
+      容的系统中使用它，而创建门面元素则图个方便。它并不用于达到与需要的特定接口的客户系统打交道这个目的，而是用
+      于提供一个简化的接口。
+    */
+
+    10.4  示例：设置HTML元素的样式
+
+    //设计一个简便函数
+    setStyle(['foo', 'bar', 'baz'], 'color', 'red');
+
+    function setStyle(elements, prop, val) {
+        for(var i = 0, len = elements.length; i++) {
+            document.getElementById(elements[i].style[prop] = val);
+        }
+    }
+    
+    //设想的形式
+    setCSS(['foo'], {
+        position : 'absolute',
+        background : 'red',
+        top : '50px',
+        left : '300px' 
+    });
+
+    function setCSS(el, styles) {
+        for( var prop in styles ) {
+            if(!styles.hasOwnProperity(prop)) continue;
+            setStyle(el, prop, styles[prop]);
+        }
+    } //达到效果，且这样写更像原生CSS设置
+
+    10.5  示例 ：设计一个事件工具
+
+    前面曾经说过，在处理跨浏览器问题时，最好创建一些门面函数。如果要设计一个大型库，那么最好把其中的所有的工具函数
+    聚拢在一起，这样工具更好用，访问起来也更简单。鉴于各种浏览器在事件处理方面表现出的大量差异，我们开发一个事件工
+    具很有必要：
+        我们先从一个基本的框架开始，这里要用到单体模式。它位于DED.util命名空间中包含着我们要设计的各个静态方法：
+        DED.util.Event = { //大概
+            //bulk goes here...
+        };
+
+        DED.util.Event = { //粗略框架
+            getEvent : function(e) {},
+            getTarget : function(e) {},
+            stopPropagation : function(e) {},
+            preventDefault : function(e) {},
+            stopEvent : function(e) {}
+        };
+
+        DED.util.Event = {
+            getEvent : function(e) {
+                 return e || window.event;
+            },
+            getTarget : function(e) {
+                return e.target || e.srcElement;
+            },
+            stopPropagation : function(e) {
+                if(e.stopPropagation()) {
+                    e.stopPropagation();
+                } else {
+                    e.cancelBubble = true;
+                }
+            },
+            preventDefault : function(e) {
+                if(e.preventDefault()) {
+                    e.preventDefault();
+                } else {
+                    e.returnValue = false;
+                }
+            },
+            stopEvent : function(e) {
+                this.stopPropagation();
+                this.preventDefault();
+            }
+        };
+
+        addEvent($('example'), 'click', function() {
+            //who clicked me.
+            console.log(DED.util.Event.getTarget(e));
+            //stop propagating and prevent the default action.
+            DED.util.Event.stopEvent(e);
+        });
+
+    10.6  实现门面模式的一般步骤
+
+        找准自己的应用程序中感觉适合使用门面方法的地方后，就可以着手加入便利方法了，这些函数的名字应该仔细考虑，
+        与它们的用途要相称，对于那种由几个函数组合而成的函数，一个简单的方法就是把相关函数的名称穿成一个函数名，
+        并采用camel大写规范，或者也可以使用thisFunctionAndThatFunction这种形式。
+        处理浏览器API的不一致属于另一种情况，此时要做的就是把分支语句代码放在新创建的门面函数中，辅以对象检查或
+        浏览器嗅探等技术。为这种函数取名有点令人头痛，因为你面临的是实现类似功能的函数在不同浏览器中碰巧有着不同
+        的名字，pageX和clientX，这里建议取一个好认的名字，并在代码文档中说明该门面函数的用途。
+
+    10.7  门面模式的适用场合
+
+        判断是否应该使用门面模式的关键在于辨认那些反复成组出线的代码。如果函数b出现在函数a之后这种情况经常出现，
+        那么也许你应该考虑添加一个把这两个函数组合起来的门面函数。
+        在自己的核心工具代码中加入门面函数的另一个可能目的是应对JavaScript内置函数在不同浏览器中的不同表现，这样
+        做并不是因为不能直接使用这些API，而是因为在处理跨浏览器的差异问题时最好的办法就是把这些差异抽取到门面方法
+        中。它们可以提供一个更一致的接口。addEvent函数就是一个例子。
+
+    10.8  门面模式之利
+
+        使用门面模式的目的就是让程序员过得更轻松一些，编写一次组合代码，然后就可以反复使用它，这有助于节省时间和精
+        力。他们可以替你把硬骨头啃掉，而且提供了一个处理常见问题和任何的简化接口。
+        门面方法方面了开发人员，并且提供了较高层的功能，如果不用门面模式的话这些功能实现起来可能会乏味而又费力，他
+        们还能降低对外部代码的依赖程度，这位应用系统的开发增加了一些额外的灵活性。通过使用门面模式，可以避免与下层
+        子系统的紧密耦合，这样就可以对这个系统进行修改而不会影响到客户端代码。
+
+    10.9  门面模式之弊
+
+        滥用，小题大做。引入库去解决小问题。
+
+--- 2014 0525 - 2014 0527 ---
+第十一章 : 适配器模式
+
+    适配器模式可用来在现有接口和不兼容的类之间进行适配。使用这些模式的对象又叫做包装器（wrapper），因为它们是在用
+    一个新的接口包装另一个对象。许多时候创建适配器同使用的情况。借助于适配器，你不用直接修改这些类也能使用他们。本
+    章将考察一些这类场合，并探讨用这适配器模式链接对象的各种方式。
+
+    11.1  适配器的特点
+
+    作为一个实现不兼容系统之间的代码薄层。如果你有一个具有三个字符串参数的函数，但客户系统拥有的却是三个字符串的数
+    组，此时就可以用一个适配器来衔接二者。
+        架设你有一个对象，还有一个以三个字符串为参数的函数：
+        var clientObject = {
+            string1 : 'foo',
+            string2 : 'bar',
+            string3 : 'baz'
+        };
+        function interfaceMethod(str1, str2, str3) {
+            //...
+        }
+        function clientToInterfaceAdapter(o) {
+            interfaceMethod(o.string1, o.string2, o.string3);
+        }
+        clientToInterfaceAdapter(clientObject);
+
+    11.2  适配原有实现
+    
+        比如生活中的电源适配器
+
+    11.3  示例：适配两个库
+    
+        现在来个示例：讲述从
+            Prototype : $
+            YUI       : get
+
+        //prototype $ function.
+        function $() {
+            var elements = new Array();
+            for( var i = 0; i < arguments.length; i++ ) {
+                var element = arguments[i];
+                if( typeof elements == 'string' ) {
+                    element = document.getElementById(element);
+                }
+                if( arguments.length == 1 ) return element;
+                elements.push(element);
+            }
+            return elements;
+        }            
+
+        /* YUI get method. */
+        YAHOO.util.DOM.get = function(el) {
+            if( YAHOO.lang.isString(el) ) {
+                return document.getElementById(el);
+            }
+            if( YAHOO.lang.isArray(el) ) {
+                var c= [];
+                for(var i = 0, len = el.length; i < len; i++) {
+                    c[c.length] = YAHOO.util.DOM.get(el[i]);
+                }
+                return c;
+            }
+            if( el ) {
+                return el;
+            } 
+            return null;
+        }
+
+        //适配器需要把这两个参数不同的方法适配起来，却很简单
+        function PrototypeToYUIAdapter() {
+            return YAHOO.util.DOM.get(arguments);
+        } 
+
+        function YUIToPrototypeAdapter(el) {
+            return $.apply( window, el instanceof Array ? el : [el] );
+        } 
+
+        //然后,ok了
+        $ = PrototypeToYUIAdapter; 
+        //or
+        YAHOO.util.DOM.get = YUIToPrototypeAdapter;
+
+        11.4  示例： 适配电子邮件的API
+        本例研究的是一个Web邮件API，它可以用来接收、发送邮件并执行一些特别的任务。我们将采用类Ajax技术从服务器获取
+        消息，然后将消息载入DOM。在完成这个应用接口后，我们将讨论如何为其编写包装函数，以便那些期待一个不同接口的
+        客户也能使用这个API
+        要事先办，先看一下整个应用系统：略...
+
+        11.5  适配器模式的适用场合
+        适配器作为中间代码层，适用于新环境，新系统却和原系统API功能与设计基本一致，但接口形式稍有不同。
+
+        11.6  适配器模式之利
+        并非为自己量身打造的接口也无需为此大动手术
+
+        11.7  适配器模式之弊
+        稳定了的接口在为其做适配器，否则一变就又无法适配了。。。
+
+--- 2014 0527 - 2014 05 28, 2014 06 17 ---
+第十二章 : 装饰者模式
+    
+    本章讨论的是一种为对象添加特性的技术，它并不使用创建新子类这种手段，装饰者模式(decoration patten)可用来透明的
+    把对象包装在具有同样接口的另一个对象之中。这样一来，你就可以给一个方法添加一些行为，然后将方法调用传递给原始对
+    象。相对于创建子类来说，使用装饰者对象是一种更灵活的选择。这种模式特别适合Javascript(在本章后面讲到的动态接口
+    时会体会这点)，因为js代码不怎么依赖对象的类型。
+
+    12.1  装饰者的结构
+
+    装饰着模式可以为对象增加功能，它可以用来替代大量子类，为了准确的说明这个概念，我们将进一步分析第7章所讲的那个
+    自行车商店的例子。你上次见到的AcmeBicycleShop类的时候，顾客可以购买的自行车有4种型号。后来这家商店开始为每一种
+    自行车提供额外的特色配件。现在顾客再加点钱就可以买到带前灯、尾灯等部件的车子。每一种可选配件都会影响到售价和车
+    的组装方法。这个问题最基本的就是为选件的每一种组合创建一个子类。
+
+        var AcmeComfortCruiser = function() { //... }; //The superclass for all of the other comfort cruisers
+
+        var AcmeComfortCruiserWithHeadlight = function() { //... };
+        var AcmeComfortCruiserWithTaillight = function() { //... };
+        var AcmeComfortCruiserWithHeadlightAndTaillight = function() { //... };
+        var AcmeComfortCruiserWithBasket = function() { //... };
+        var AcmeComfortCruiserWithHeadlightAndBasket = function() { //... };
+        var AcmeComfortCruiserWithTaillightAndBasket = function() { //... };
+        var AcmeComfortCruiserWithHeadlightTaillightAndBasket = function() { //... };
+        var AcmeComfortCruiserWithBell = function() { //... };
+        //...子子孙孙无穷尽，装饰着模式是这个问题的最佳解决办法
+
+        在这个例子中，选件类就是装饰者，而自行车类是他它们的组件(component)。装饰者对其进行了透明的包装，二者可以
+        互换使用，这是因为它们实现了同样的接口。下面我们就来看看应该怎么样实现自行车装饰者类，首先要修改一下接口，
+        加入一个getPrice()方法：
+
+        /* The Bicycle interface */
+
+        var Bicycle = new Interface('Bicycle', ['assemble', 'wash', 'ride', 'repair', 'getPrice']);
+
+        var AcmeComfortCruiser = function() { 
+            //...implements Bicycle.
+        };
+        AcmeComfortCruiser.prototype = {
+            assemble : function() {
+                //...
+            },
+            wash : function() {
+                //...
+            },
+            ride : function() {
+                //...
+            },
+            repair : function() {
+                //...
+            },
+            getPrice : function() {
+                //...
+            }
+        };
+
+        /* The BicycleDecorator abstract decorator class. */
+
+        var BicycleDecorator = function(bicycle) { //Implements Bicycle.
+            Interface.ensureImplements(bicycle, Bicycle);
+            this.bicycle = bicycle;
+        };
+        BicycleDecorator.prototype = {
+            assemble : function() {
+                return this.bicycle.assemble();
+            },
+            wash : function() {
+                return this.bicycle.wash();
+            },
+            ride : function() {
+                return this,bicycle.ride();
+            },
+            repair : fucntion() {
+                return this.bicycle.repair();
+            },
+            getPrice : function() {
+                return this.bicycle.getPrice();
+            }
+        };
+
+        /* HeadlightDecorator class. */
+
+        var HeadlightDecorator = function(bicycle) {
+            //Call the superclass's constructor.
+            HeadlightDecorator.superclass.constructor.call(this, bicycle);
+        }
+        extend(HeadlightDecorator, BicycleDecorator); //Excend the superclass.
+        HeadlightDecorator.prototype.assemble = function() {
+            return this.bicycle.assemble() + 'Attach headlight to handlebars.';
+        };
+        HeadlightDecorator.prototype.getPrice = function() {
+            return this.bicycle.getPrice() + 15.00;
+        };
+
+        //使用：
+        var MyBicycle = new AcmeComfortCruisers(); //Instantiate the bicycle.
+        alert(myBicycle.getPrice()); //Returns 399.00
+        myBicycle = new HeadlightDecorator(myBicycle); //Decorator the bicycle object.
+        alert(myBicycle.getPrice()); //Now returns 414.00
+
+    12.1.1  接口在装饰者模式中的角色
+
+        它说明了装饰者模式必须实现那些方法，这有助于防止开发过程中的错误，通过创建一个具有一批固定方法的接口，
+        你所面对的就不再是一个游移不定的目标。此外，它还可以在新版的工厂方法(参见12.3节)中用来确保所创建的对象
+        都实现了必须的方法。
+            如果装饰者对象与其组件不能互换使用，它就会丧失其功能，这是装饰者模式的关键特性，要注意防止装饰者和
+        组件出现的接口方面的差异。这种模式的好处之一就是可以通过透明的使用对象装饰现有的系统的对象，而这并不会
+        改变代码中德其他东西，只有装饰者和组件实现了同样的接口才能做到这一点。
+
+    12.2  装饰者模式修改其组建的方式
+        装饰者模式的作用就在于以某种方式对组件对象的行为进行修改。本节将介绍一些这方面的做法。
+
+        （1）在方法之后添加行为
+        在方法之后添加行为是最常见的修改方法的具体做法。具体而言就是先调用组件的方法，并在其返回后实施一些附加
+        的行为。HeadlightDecarator的getPrice方法就是一个简单的例子：
+        HeadlightDEcarator.prototype.getPrice = function(bicycle) {
+            return this.bicycle.getPrice() + 15.00;
+        };        
+
+        var myBicycle = new AcmeComfortCruisers();
+        alert(myBicycle.getPrice()); //Return 399.00
+
+        myBicycle = new HeadlightDecarator(myBicycle);
+        myBicycle = new HeadlightDecarator(myBicycle);
+        myBicycle = new TaillightDecarator(myBicycle);
+
+        alert(myBicycle.getPrice()); //Now returns 438.00
+        //调用栈大体是这样的：TaillightDecorator对象上调用getPrice(),继而调用较外层的HeadlightDecarator的getPrice
+
+        //实现一个提供车架颜色选择的装饰者
+
+        /* FrameColorDecarator class. */
+
+        var FrameColorDecarator = function(bicycle, frameColor) {
+            //Call the superclass's constructor.
+            FrameColor.superclass.constructor.call(this, bicycle);
+            this.frameColor = frameColor;
+        };
+        extend(FrameColorDecarator, BicycleDecorator); //Extend the superclass.
+        FrameColor.prototype.assemble = function() {
+            return 'Paint the frame ' + this.frameColor + ' and allow it to dry. ' + this.bicycle.assemble();
+        };
+        FrameColor.prototype.getPrice = function() {
+            return this.bicycle.getPrice() + 30.00;
+        };
+
+    12.2.3  替换方法
+
+        /* 有时为了实现新行为必须对原有的方法进行整体替换，在此情况下，组件方法不会被调用（或虽然被调用但是其
+        返回值会被抛弃）。作为这种用法的一个例子，我们创建一个实现自行车终身保修的装饰者： */
+    
+        /* LifetimeWarrantyDecorator class. */
+
+        var LifetimeWarrantyDecorator = function() {
+          //Call the superclass's constructor.
+          LifetimeWarrantyDecarator.superclass.constructor.call(this, bicycle);
+        };
+        extend(LifetimeWarrantyDecorator, BicycleDecorator);
+        LifetimeWarrantyDecorator.prototype.repair = function() {
+          return 'This bicycle is coverd by a lifetime warranty. Please take it to an Acme bicycle shop. ';
+        };
+        LifetimeWarrantyDecarator.prototype.getPrice = function() {
+          return this.bicycle.getPrice() + 199.00;
+        };
+
+        //这个装饰者把组件的repair方法替换为一个新方法，而组件的方法则不再会被调用。装饰者模式也可以根据某种条件
+        //决定是否替换组件的方法，在条件满足时替换方法，否则就使用组件的方法。
+
+        /* TimedWarrantyDecarator class. */
+
+        var TimedWarrantyDecarator = function(bicycle, coverageLengthInYears) {
+          //Implements Bicycle
+          //Call the superclass's constructor.
+          TimedWarrantyDecorator.superclass.constructor.call(this, bicycle);
+          this.coverageLength = coverageLengthInYears;
+          this.expDate = new Date();
+          var coverageLengthInMs = this.coverageLength * 365 * 24 * 60 * 60 *1000;
+          this.expDate.setTime(this,expDate.getTime() + coverageLengthInMs);
+        }
+        extend(TimedWarrantyDecorator, BicycleDecorator);
+        TimedWarrantyDecorator.prototype.repair = function() {
+          var repairInstructions;
+          var currentDate = new Date();
+          if( currentDate < this.expDate ) {
+            repairInstructions = 'This bicycle is currently coverd by a warranty. ' +
+            'Please take it to a Acme Bicycle shop';
+          } else {
+            repairInstructions = this.bicycle.repair();
+          }
+
+          return repairInstructions;
+        };
+        TimedWarrantyDecorator.prototype.getPrice = function() {
+          return this.bicycle.getPrice() + (40.00 * this.coverageLength);
+        };
+
+    12.2.4  添加新方法
+
+        前面例子所讲的修改都是发生在接口所定义的方法中（组件也具有这些方法），但这并不是一种必然的要求。装饰者也
+        可以定义新方法，外围代码首先必须知道有这样的方法，由于这些新方法并不是在接口中定义的，而且它们是动态添加
+        的，因此有必要进行类型检查，以验明用于包装组件的对象的最外层装饰者。
+
+        /* BellDecorator class. */
+
+        var BellDecorator = function(bicycle) { //implements bicycle
+          BellDecorator.superclass.call(this, bicycle); //call the superclass's constructor
+        };    
+        extend(BellDecorator, BicycleDecorator); //Extend the superclass.
+        BellDecorator.prototype.assemble = function() {
+          return this.bicycle.assemble() + 'attach bell to handlebars.';
+        };
+        BellDecorator.prototype.getPrice = function() {
+          return this.bicycle.getPrice() + 6.00;
+        };
+        BellDecorator.prototype.ringBell = function() {
+          return 'Bell rung.';
+        };
+
+        /* The BicycleDecorator abstract decorator class, improved. */
+
+        var BicycleDecorator = function(bicycle) { //implements Bicycle
+          this.bicycle = bicycle;
+          this.interface = Bicycle;
+
+          //Loop through all of the attributes of this.bicycle and create pass-through
+          //methods for any methods that aren't currently implemented.
+          outerloop: for( var key in this.bicycle ) {
+            //Ensure that the property is a function.
+            if ( typeof this.bicycle[key] !== 'function' ) {
+              continue outerloop;
+            }
+            //Ensure that the method isn't in the interface.
+            for( var i = 0, len = this.interface.methods.length; i < len; i++ ) {
+              if( key === this.interface.methods[i] ) {
+                continue outerloop;
+              }
+            }
+
+            //Add the new method.
+            var that = this;
+            !!!(function() {
+              that[methodName] = function() {
+                return that.bicycle[methodName]();
+              };
+            })(key);
+          }
+        }
+        BicycleDecorator.prototype = {
+          assemble: function() {
+            return this.bicycle.assemble();
+          },
+          wash: function() {
+            return this.bicycle.wash();
+          },
+          ride: function() {
+            return this.bicycle.ride();
+          },
+          repair: function() {
+            return this.bicycle.repair();
+          },
+          getPrice: function() {
+            return this.bicycle.getPrice();
+          }
+        };
+
+    12.3  工厂的角色
+    
+        前几节中已经提到，装饰者的应用顺序有时很重要。在理想情况下，装饰者应该能够以一种完全与顺序无关的方式创建，
+        然而这并不总是能够办到，如果必须确保某种特定的顺序，那么可以为此使用工厂对象，实际上，不管顺序如何，工
+        厂都是很适于创建装饰对象。本节将重写第7章中创建的AcmeBicycleShop类的createBicycle方法，以便用户可以指定自
+        行车要配的选件，这些选件将被转换为装饰者，并在方法返回之前被应用到新创建的自行车对象上。
+
+        /* AcmeBicycle factory class, with decorators. */
+
+        var AcmeBicycleShop = function() {};
+        extend(AcmeBicycleShop, BicycleShop);
+        AcmeBicycleShop.prototype.createBicycle = function(model, options) {
+          //Instantiate the bicycle object.
+          var bicycle = new AcmeBicycleShop.models[model]();
+
+          //Iterate through the options and instantiate decrators.
+          for ( var i = 0, len = options.length; i < len; i++ ) {
+            var decorator = AcmeBicycleShop.options[options[i].name];
+            if ( typeof decorator !== 'function' ) {
+              throw new Error('Decorator' + options[i].name + 'not found.');
+            }
+            var argument = option[i].arg;
+            bicycle = new decorator(bicycle. argument);
+          }
+
+          //check the interface and return the finished object.
+          Interface.ensureImplements(bicycle, Bicycle);
+          return bicycle;
+        };
+
+        //Model name to class name mapping.
+        AcmeBicycleShop.models = {
+          'The Speedster'      : AcmeSpeedster,
+          'The Lowrider'       : AcmeLowrider,
+          'The Flatlander'     : AcmeFlatlander,
+          'The Comfort Cruiser': AcmeComfortCruiser
+        };
+
+        //Option name to decorator class name mapping.
+        AcmeBicycleShop.options = {
+          'headlight'        : HeadlightDecorator,
+          'taillight'        : TaillightDecorator,
+          'bell'             : BellDecorator,
+          'basket'           : BasketDecorator,
+          'color'            : FrameColorDecorator,
+          'lifetime warranty': LifetimeWarrantyDecorator,
+          'timed warranty'   : TimedWarrantyDecorator  
+        };
+
+        如果顺序很重要，那么可以添加一些代码，在使用选件数组实例化装饰者之前对其进行排序。用工厂实例化自行车对象有
+        许多好处。首先，不必了解自行车和装饰者的各种类名，所有这些信息都封装在AcmeBicycleShop类中。因此添加自行车型
+        号和选件非常容易，只要把它们添加到AcmeBicycleShop.models或AcmeBicycleShop.options数组即可。作为一个示范，我
+        们来比较一下创建带装饰的自行车对象的两种不同做法，第一种做法不使用工厂：
+
+        var myBicycle = new AcmeSpeedster();
+        myBicycle = new FrameColorDecorator(myBicycle, 'blue');
+        myBicycle = new HeadlightDecorator(myBicycle);
+        myBicycle = new TaillightDecorator(myBicycle);
+        myBicycle = new TimedWarrantyDecorator(myBicycle, 2);
+
+        //采用这种直接实例化对象的做法，与客户代码紧密耦合在一起的类不下5个。与此相比，下面所示的第二种做法使用了工
+        厂，与客户代码耦合在一起的只有一个类，即那个工厂本身：
+
+        var alecsCruisers = new AcmeBicycleShop();
+        var myBicycle = alecsCruiser.createBicycle('The Speedster', [
+          { name: 'color', arg: 'blue' },
+          { name: 'headlight' },
+          { name: 'taillight' },
+          { name: 'timed warranty', arg: 2 }
+        ]);
+
+        该工厂会对经历了最后一道装饰的对象进行接口检查，以确保它实现了正确的接口，这意味着你可以相信它创造出来的对
+        象能做你希望它做得任何事，这也意味着任何使用createBicycle方法的代码只管使用它创建出来的对象就行，不必关心它
+        是一个自行车对象还是装饰者对象，这是由于它们实现了同样的接口，因此对于客户代码来说它们没有本质上的区别。
+            最后要说的就是，如果有必要的话，工厂可以选择对选件进行排序，某些装饰者修改组件方法的方式决定了它们需要
+        最先或者最后被应用，再在此情况下工厂的这种作用就尤其有用，那种会替换组件方法而不是对其扩充的装饰者需要放在
+        最后创建，以确保其成为最外层的装饰者。
+
+        12.4  函数装饰者
+
+            装饰者并不局限于类。你也可以创建用来包装独立的函数和方法的装饰者。在某些语言中这是一种常见的技术，这种
+        技术在Python中应用很广，以至于函数装饰者已经成为其语言核心中的内置成分。
+            下面是一个简单的函数装饰者的例子，这个装饰者包装了另一个函数，其作用在于将被包装着的返回结果改为大写形
+        式：
+        function upperCaseDecorator(func) {
+          return function() {
+            return func.apply(this, arguments).toUpperCase();
+          }
+        }
+
+        这个装饰者可以用来创建新函数，后者执行起来与普通函数没什么不同，下面的例子先定义了一个普通函数，然后将其装
+        饰为一个新函数：
+        function getDate() {
+          return ( new Date ).toString();
+        }
+        getDateCaps = upperCaseDecorator(getDate);
+        console.log( getDate() );
+        console.log( getDateCaps() );
+
+        BellDecorator.prototype.ringBellLoudly = upperCaseDecorator(BellDecorator.prototype.ringBell);
+        var myBicycle = new AcmeComfortCruiser();
+        myBicycle = new BellDecorator(myBicycle);
+
+        alert(myBicycle.ringBell()); //return 'Bell rung'
+        alert(myBicycle.ringBellLoudly()); //return 'BELL RUNG'
+
+        函数装饰者在对另一个函数的输出应用某种格式或执行某种转换这方面很有用处。例如，你可以创建一个用来包装自行车
+        类的assemble方法的函数装饰者，让它用别的语言返回组装指示（不过这会是一个非常庞大的装饰者）。你也可以创建一
+        个函数装饰者用它来包装那种返回数值的函数，并将该数值转换为别的数制形式。函数装饰者给程序员带来了极大的灵活
+        性，而实现它所需要的代码比大而全的类装饰者少得多。
+
+        12.5  装饰者模式的适用场合
+
+        如果需要为类增加特性或职责，从而该类派生子类的解决办法不实际的话，就应该使用装饰者模式。
+        如果需要为对象添加特性而又不想使用该对象的代码的话，也可以采用装饰者模式动态透明的修改对象，所以它们很适合
+        修改现有系统这一任务。相比卷入创建和维护子类的麻烦，创建和应用一些装饰者往往要省事得多。
+
+        12.6  示例：方法性能分析器
+
+        装饰者模式擅长为各种对象添加新特性，本例要创建的装饰者可以用来包装任何对象，以便为其提供方法的性你分析
+        ---method profiling 功能，我们打算在每个方法调用的前后添加一些代码，分别用于启动计时器和停止计时器并报告结
+        束。这个装饰者必须完全透明，这样才能应用与任何接口，我们先创建一个实现了计时功能的速成版装饰者，然后再改造
+        其为通用型装饰者。
+
+        我们需要一个用来测试的样例类。下面的ListBuilder类就是用于这个目的的，其唯一的功能就是在网页上创建一个有序列
+        表：
+        /* ListBuilder class. */
+
+        var ListBuilder = function(parent, listLength) {
+          this.parent = $(parent);
+          this.listLength = listLength;
+        };
+        ListBuilder.prototype = {
+          buildList: function() {
+            var list = document.createElement('ol');
+            this.parent.appendChild(list);
+
+            for ( var i = 0; i < this.listLength; i++ ) {
+              var item = document.createElement('li');
+              list.appendChild(item);
+            }
+          }
+        };
+        我们首先要创建一个专用于这个ListBuilder类的装饰者，它将记录执行buildList方法所耗用的时间。我们用console.log
+        输出这些结果，运行这段代码时，要知道并非所有浏览器都实现了console对象：
+        /* SimpleProfiler class. */
+
+        var SimpleProfiler = function(component) {
+          this.component = component;
+        };
+        SimpleProfiler.prototype = {
+          buildList: function() {
+            var startTime = new Date();
+            this.component.buildList();
+            var elapsedTime = ( new Date() ).getTime() - startTime.getTime();
+            window.console && console.log('biildList: ' + elapsedTime + 'ms');
+          }
+        };
+
+        var list = ListBuilder('list-container', 5000); //Instantiate the object.
+        list = new SimpleProfiler(list); //Wrap the object in decorator.
+        list.buildList(); //Creates the list and displays the op time.
+
+        /* MethodProfiler class. */
+
+        var MethodProfiler = function(component) {
+          this.component = component;
+          this.timers = {};
+
+          for ( var key in this.component ) {
+            //Ensure that the property is a function.
+            if ( typeof this.component[key] !== 'function' ) {
+              continue;
+            }
+
+            //Add the method.
+            var that = this;
+            (function() {
+              that[methodName] = function() {
+                that.startTimer(methodName);
+                var returnValue = that.component[methodName].apply(that.component, arguments);
+                that.displayTime( methodName, that.getElapsedTime(methodName) );
+                return returnValue;
+              };
+            })(key);
+          } //end of for loop...
+        };
+
+        MethodProfiler.prototype = {
+          startTimer: function(methodName) {
+            this.timers[methodName] = ( new Date() ).getTime();
+          },
+          getElapsedTime: function(methodName) {
+            return ( new Date() ).getTime() - this.timers[methodName];
+          },
+          displayTime: function(methodName, time) {
+            window.console && console.log(methodName + ' : ' + 'ms');
+          }
+        };
+
+        12.7  装饰者模式之利
+        一切动态添加实现，不用事先知道组件对象的接口，在现有对象添砖加瓦这方面，装饰者模式为程序员带来了极大的灵活
+        性。
+
+        12.8  装饰者模式之弊
+
+        1.依赖于严格的类型检查的代码可能会出问题，尽管在大多数时候JavaScript不进行类型检查，不过如果代码中包含它，
+        就会无法匹配所需要的类型，通常装饰者模式对客户代码是完全透明的，不过，在这种情况下，客户代码就能感知装饰者
+        与其他组件的不同。
+        2.使用装饰者模式往往会增加构架的复杂程度，且一些语法细节让人生畏，特别是不熟悉这种模式的客户，所以，一定要
+        多花些心思，确保自己的代码有良好的文档说明，并且容易理解。
+
+        12.9  小结
+
+        略...

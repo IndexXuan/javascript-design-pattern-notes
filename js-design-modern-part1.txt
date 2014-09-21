@@ -1,0 +1,842 @@
+@include ch01\ch02\ch03
+
+--- 2014 04 02 ---
+第一章 : 富有表现力的JavaScript
+
+    1.1  JavaScript的灵活性
+
+      长久以来，JavaScript都被当作是玩具语言，认为职业的程序员无需关注于此。其实很多时候我们并没有认识到
+      他的全部能力和当今的编程世界的独特性，JavaScript是一种极富表现力的语言，它具有C语言家族所罕见的特性。
+
+      这种语言允许你用各种方法完成同样的任务，还允许你在面向对象的编程过程中使用函数式的概念来丰富其实现方式，
+      接下来解释并探究为什么该使用设计模式，以及它们在JavaScript程序设计的运用是如何使代码更高效，更易于处理。
+
+      例如一个很常见的例子：动画的开始和结束:
+
+        (1)
+        /* Start and stop animation using function */
+
+        function startAnimation() { ... }
+        function stopAnimation()  { ... }
+
+        //这种做法很简单，但是你无法创建可以保存状态并且具有一些仅对其内部状态进行操作的方法的动画对象。
+        下面的代码定义了一个类，你可以用它来创建这种对象：
+
+        (2)    
+        /* Anim class */
+
+        var Anim = function() {
+            //...
+        };
+
+        Anim.prototype.start = function() {
+            //...
+        }; 
+
+        Anim.prototype.stop = function() {
+            //...
+        };
+
+        /* Usage */
+
+        var myAnim = new Anim();
+        myAnim.start();
+        //...
+        myAnim.stop();
+
+        //上述代码定义了一个名为Anim的类，并把两个方法赋给了该类的prototype属性。(更多prototype详见第三章)
+
+
+        (3):较为传统的方式
+        //将方法定义在class内部
+        /* Anim class, with a slightly different syntax for declaring methods. */
+
+        var Anim = function() {
+            //...
+        };
+
+        Anim.prototype = {
+            start : function () { //... },
+            stop  : fucntion () { //... }
+        };
+
+        (4)
+        /* Add a method to the Function Object that can be used to declare methods. */
+
+        Function.prototype.method = function(name, fn) {
+            this.prototype[name] = fn;
+        };
+
+        /* Anim class. with method created using a convenience method. */
+
+        var Anim = function() { //... };
+
+        Anim.method('start', function() {
+            //...
+        });
+
+        Anim.method('stop', function() {
+            //...
+        });
+
+        (5)
+        /* Same as the four , but chainable */
+
+        Function.prototype.method = function(name, fn) { 
+            this.prototype[name] = fn;
+            return this;
+        };
+
+        /* Usage */
+
+        var Anim = function() {
+            //...
+        };
+
+        Anim.
+            method('start', function() {
+                //...
+            }).
+            method('stop', function() {
+                //...
+            });
+
+        小节:同一个任务的5种实现方法，我们可以基于自己的编程风格，技术背景选择合适的顺手的进行工作，
+        当然，不同的代码风格在篇幅、编码效率和执行性能方面各有其特点，后续将逐步介绍！
+
+    1.2  弱类型语言        
+
+        有三种原始类型：布尔型，字符串，数值型
+        配合复合数据类型（数组等）
+        最后还有空类型和未定义类型
+
+        原始数据类型按值传送而其他类型按引用传送！！！！！！！！！
+
+        类型转化小技巧：toString方法可以把数值类型或布尔值转换为字符串，parseInt、parseFloat可以把字符串
+        转换为数值，双重"非"操作可以把字符串或数值转变为布尔值： var bool = !!num;
+
+        弱类型的变量带来了极大的灵活性，JavaScript会根据需要进行类型转换，所以说省去了类型出错的麻烦
+
+    1.3  函数是一等对象
+
+        在JavaScript中函数是一等对象，他们可以存储变量，可以参与构造，可以作为参数传递给其他函数，可以作为
+        返回值传递给其他函数，还可以在运行时进行构造。在与函数打交道时，这些特性带来了极大的灵活性和极强的
+        表达能力，正是这些构成了构建传统的面向对象框架的基础！
+
+        例如：匿名立即执行函数
+            /* An anonymous function, executed immediately */
+
+            (function(num) {
+                var foo = 10;
+                var bar = 2;
+                alert(foo * bar * num); // 10*2*10 = 200
+            })(a = 10);
+
+            (function(foo, bar) {
+                alert(foo * bar);
+            })(10, 2)
+
+        JavaScript的无法形成天然的私有变量，但不代表没办法，JavaScript具有函数级的作用域，这意味着定义在函数
+        内部的变量在函数的外部无法被访问到，JavaScript的作用域又是词法性质的（lexically scoped）。这意味着
+        函数运行在定义它的作用域中而非调用它的作用域中，把这两个因素结合起来，就能通过把变量包裹在匿名函数中
+        而对其加以保护，创建私有变量。
+
+        /* An anonymous function used as a closure */
+
+        var baz; //此处可省略
+
+        (function() {
+            var foo = 10;
+            var bar = 2;
+            /* window.baz */ 
+            baz = function() { //没有var声明的变量即为全局变量 如果var baz...则外部无法访问，依赖曝光到全局
+                return alert(foo * bar);
+            }; 
+        })();
+        baz(); 
+
+    1.4  对象的易变性
+        在JavaScript中，一切都是对象(除了那三种原始数据类型，即便是这些类型，在必要的时也会被自动包装为对象)
+        所有对象都是易变的(mutable)。这意味着你可以使用一些在其他语言中所不允许的技术，例如为对象添加属性：
+        function displayError(message) {
+            displayError.numTimesExecuted++;
+            alert(message);
+        };
+        displayError.numTimesExecuted = 0;
+        //意味着你可以对先前定义的类和实例化的对象的属性进行自由的修改：
+
+        /* Class Person */
+
+        function(name, age) {
+            this.name = name;
+            this.age  = age;
+        }
+
+        Person.prototype = {
+            getName : function() {
+                return this.name;
+            },
+            getAge  : function() {
+                return this.age;
+            }
+        }
+
+        /* Instantiate the class */
+
+        var Pr = new Person('pengrui' , 21);
+        var Xx = new Person('xiaoxuan', 21);
+
+        /* Modify the class */
+
+        Person.prototype.getGreeting = function() {
+            return 'Hi' + this.getName() + '!';
+        };
+
+        /* Modify a specific instance */
+
+        Pr.displayGreeting = function() {
+            alert(this.getGreeting());
+        }
+        //getGreeting方法在实例化了两个对象后再添加，这就得益于原型链继承机制，而且Pr对象还多了个
+        displayGreeting方法，而别的实例却没有！
+
+        对象的易变性相关的还有一个内省(introspection)的概念，你可以在运行时检查对象所具有的属性和方法
+        还可以使用这些信息动态实例化类和执行其方法(这种技术叫做反射reflection),甚至不需要在开发时知道
+        他们的名称，这些技术在动态脚本编程中发挥着重要作用，而静态语言如C++则显然不能。
+
+        JavaScript的大多数仿照传统面向对象的特性都依赖对象的易变性和反射，如果习惯了C++和Java，则很奇怪
+        ，因为这些语言中，不能对已经实例化的对象进行扩展，也不能对已经建立好的类进行修改，这使得JS成为了
+        一种强力武器，当然也有其坏处，运行时可以修改导致原来写的类及其方法并不能保证未来完好性，这是JS
+        很少进行类型检查的原因之一，这些问题还将在"鸭式辨型"(duck typing)和接口检查时进行探讨。
+
+    1.5  继承
+        天然的是基于原型链式的继承，强于类继承，所以可以模仿它。后续重点讨论这部分！
+
+    1.6  JavaScript中的设计模式
+        设计模式就是为了解决下列问题：
+        (1)  可维护性
+        (2)  沟通
+        (3)  性能
+
+        不使用设计模式的理由:
+        (1)  复杂性
+        (2)  性能:获得可维护性的同时，大部分的设计模式都会或多或少的拖累性能。
+
+--- 2014 04 03 ---
+第二章 : 接口
+    2.1  什么是接口？
+        接口提供了一种用以说明一个对象应该具有哪些方法的手段。具有一定的语义性或者至少暗示了这些方法的语义
+        有了这个工具，你就能按对象提供的特性进行分组，例如一批对象彼此存在着极大的差异，但是他们都实现了一个
+        Comparable接口，那么在Object.compare(anotherObject)方法中就可以互换使用这些对象，你还可以使用接口开
+        发不同的类的共同性。
+
+        接口之利：
+            既定的一批接口具有自我描述性，并能够进行代码重用，接口可以告诉程序员一个类实现了哪些方法，从而帮助
+        其使用这个类，如果你熟悉一个特定的接口，那么就已经知道了如何使用任何实现了这个接口的类，从而更有
+        可能重用现有的类。
+            接口还有助于稳定不同的类之间的通信方式，如果事先知道了接口，你就能减少在集成两个对象的过程中出现的
+        问题，借助于它，你可以事先就说明你希望一个类有哪些特性和操作，一个程序员可以针对需要的类定义一个
+        接口，并把它转交给另一个程序员。第二个程序员可以随心所欲的编写自己的代码，只要他定义的类实现了那个
+        接口。这种方式在大型项目中极其有用。
+            测试和调试因此变得更轻松。在JavaScript这种弱类型语言中，类型不匹配的错误很难追踪，使用接口可以然这
+        种错误的查找更方便一点，因为此时如果一个对象不像所要求的类型，或者没有实现必要的方法，那么你就会得
+        到错误信息，错误被限制在了方法内而非对象的构成中。
+            接口还能让代码变得稳固，因为对接口的任何改变将在所有实现了它的类中体现，如果接口添加了一个操作，
+        而实现了它的类中并没有添加此方法，你肯定会立即看到一个错误！
+
+        接口之弊：此处指JS接口
+            接口一定程度上强化了类型的作用，这降低了语言的灵活性。
+            接口在JavaScript中没有内置支持，而试图模仿其他语言内置的功能总会有一些风险，JavaScript中没有
+        Interface这个关键词，因此你用什么方法实现接口总与C++/Java这些语言大相径庭，加大了难度
+            在JavaScript中实现接口的方法都会对性能造成影响，在某种程度上归咎于额外的方法开销，我们的实现
+        方式中使用了两个for循环遍历所需要的每个接口中的每个方法，性能会受影响。
+            最重要的一点，非原生的就无法保证其他程序员遵守了你设计的接口，其他语言内置的接口概念会确保该类
+        实现这个接口。编码规范和辅助类或许可以帮助我们，但终究还是要靠自觉且强制性无法保证，失去接口价值!
+
+    2.2  几种其他语言的经典接口使用范例
+    
+    2.3  在JavaScript中模仿接口
+
+      (1)  注释描述法 ： 最简单，但效果是最差的，这种方法模拟其他面向对象语言中的interface和implements关键字
+
+        /*
+    
+        interface Composite {
+            function add(child);
+            function remove(child);
+            function getChild(index);
+        }
+
+        interface FormItem {
+            function save();
+        }
+
+        */
+
+        var CompositeForm = function(id, method, action) {
+            //...
+        };
+
+        //Implement the Composite interface
+
+        Composite.prototype.add = function() { //... };
+        Composite.prototype.remove = function() { //... };
+        Composite.prototype.getChild = function() { //... };
+
+        //Implement the FormItem interface
+
+        CompositeForm.prototype.save = function() { //... };
+
+        /*
+         *  这种方法并不好，它并没有确保CompositeForm真正实现了正确的方法集而且也没有错误抛出，说到底还是程序文档
+         *  范畴
+        */
+
+        (2)  用属性检查模仿接口
+
+        /*  这种方法更严谨一点，所有类都明确声明了自己实现了哪些接口，
+         *  哪些想与这个类打交道的对象可以针对这些声明进行检查。哪些
+         *  接口自身仍然是注释，但现在你可以通过检查一个属性得知某个类自称实现了什么接口 
+         */
+
+        /*
+        interface Composite {
+            function add(child);
+            function remove(child);
+            function getChild(index);
+        }
+
+        interface FormItem {
+            function save();
+        }
+        */
+
+        var CompositeForm = function(id, method, action) {
+            this.implementsInterfaces = ['Composite', 'FormItem']; //数组存储宣称要实现的接口
+            //...
+        };
+
+        //...
+
+        fucntion addForm(formInstance) {
+            if(!implements(formInstance, 'Composite', 'FormItem')) {
+                throw new Error("Object does not implement a required interface");
+            }
+            //...
+        }
+
+        // The implements function, which checks to see if an object declares that it
+        // implements the required interface.
+
+        function implements(object) {
+            for(var i = 1; i < arguments.length; i++) {
+                var interfaceName = arguments[i];
+                var interfaceFound = false;
+                for(var j = 0; j < object.implementsInterfaces.length; j++) {
+                    if(object.implementsInterface[j] == interfaceName) {
+                        interfaceFound = true;
+                        break;
+                    }
+                }
+                if(!interfaceFound) {
+                    return false; //An interface was not found
+                }
+            }
+            return true; //All interfaces were found.
+        }  
+
+        (3)  鸭式辨型模仿接口
+
+        /* 类声明了自己支持哪些接口并不重要，只要它具有这些接口中的方法就行。
+        *  这个方法背后的观点很简单，如果对象具有与接口定义相同方法名的所有方法
+        *  那么就可以认为它实现了这个接口，下面构造一个辅助函数来确保对象具有必须的方法 
+        */
+
+        //Interfaces
+
+        var Composite = new Interface('Composite', ['add', 'remove', 'getChild']);
+        var FormItem  = new Interface('FormItem', ['save']);
+
+        //CompositeForm class
+
+        var CompositeForm = function(id, method, action) {
+        //...
+        };
+
+        //...
+
+        function addForm(formInstance) {
+            ensureImplements(formInstance, Composite, FormItem);
+            //this function will throw an error if a required method is not implemented.
+        }
+
+        (4)  集百家之长实现接口！！！*********************！！！
+
+        本法综合采用第一种和第三种方法，用注释声明类支持的接口，从而提高代码可重用性及其文档的完善性。
+        我们还辅助类Interface及其类方法Interface.ensureImplements来对对象实现的方法显式检查。如果对象
+        未能通过检查，则返回错误信息！
+
+        //Interface类
+        //下面是本书中使用的Interface类的定义：包括对参数及其类型进行了强制严格的检查！！！
+        //如果没有错误被抛出则可以确定接口得到了正确的声明和实现
+
+        //Constructor
+        var Interface = function(name, methods) {
+            if(arguments.length != 2) {
+                throw new Error("Interface constructor called with" + 
+                arguments.length + "arguments, but expected exactly 2");
+            }
+
+            this.name = name;
+            this.methods = [];
+            for(var i = 0, len = methods.length; i < len; i++) {
+                if(typeof methods[i] !== "string") {
+                    throw new Error("Interface constructor expects method names to be passed in as a string!");
+                }
+                this.methods.push(methods[i]);
+            }
+        };
+
+        //Static class method
+        Interface.ensureImplements = function(object) {
+            if(arguments.length < 2) {
+                throw new Error("Function Interface.ensureImplements called with" + arguments.length + 
+                "arguments, but expected at least 2.");
+            }
+
+            for(var i = 1, len = arguments.length; i < len; i++) {
+                var interface = arguments[i];
+                if(interface.constructor != Interface) {
+                    throw new Error("Function Interface.ensureImplements expected arguments two and above"
+                    + " to be instance of Interface.");
+                }
+
+                for(var j = 0, methodsLen = interface.methods.length; j < methodLen; j++) {
+                    var method = interface.methods[j];
+                    if(!object[method] || typeof object[method] !== "function") {
+                        throw new Error("Function Interface.ensureImplements: object does not implement the "
+                    + interface.name + " interface. Method " + method + "was not found.");
+                    }
+                }
+            }
+        };
+
+    2.4  如上
+
+    2.5  Interface类的使用场景：
+        在开发的过程中，如果API发生了变化，只要新的API实现了同样的接口，它就能天衣无缝的替换原有API。现在
+        的因特网上你无法控制的代码情况越来越多，虽然他们来源可靠，可是还是需要谨慎的使用，一种应对方法为为
+        每一个依赖的API创建一个Interface对象，然后对每一个对象进行检查，以确保正确实现了那些接口：
+
+        var DynamicMap = new Interface('DynamicMap', ['centerOnPoint', 'zoom', 'draw']);
+
+        function displayRoute(mapInstance) {
+            Interface.ensureImplements(mapInstance, DynamicMap);
+            mapInstance.centerOnPoint(12, 34);
+            mapInstance.zoom(5);
+            mapInstance.draw();
+            //...
+        }
+
+        这个例子中，Interface对象很好的验证了API的参数，确保了系统的稳定性和安全性。
+
+    2.6  依赖接口的设计模式  以后细说...
+        工厂模式
+        组合模式
+        装饰着模式
+        命令模式  
+
+--- 2014 04 04 ---
+第三章 : 封装与信息隐藏
+    3.1  信息隐藏原则  封装
+        是面向对象对象编程的根本，它把实现的具体细节隐藏而暴露出一些语义化的接口供开发者使用，不必关系实现细节。
+        信息隐藏是目的，封装是手段
+        接口扮演的角色：接口提供了一份记载着可供公众访问的方法的契约，它定义了两个对象间可以具有的关系，只要接口
+        不变，这个关系的双方都是可替换的，不一定非得使用第二章定义的那样的严格接口，但大多数情况下，你将发现对
+        可以使用的方法加以记载是很有好处，不是有了接口就万事大吉了，你应该避免公开未定义于接口中的方法，总之，
+        暴露出可供使用的方法，并且不让其他开发者对此对象未公开的方法产生依赖，造成不良后果。
+
+    3.2   创建对象的基本模式
+        (1)  门户大开型对象
+        var Book = function(isbn, title, author) {
+            if(isbn == undefined) throw new Error("Book constructor requires an isbn.");
+            this.isbn   = isbn;
+            this.title  = title || "No title specified";
+            this.author = author || "No author specified";
+        } 
+
+        Book.prototype.display = function() {
+            //...
+        };
+
+        //在构造器中检查isbn，如果没有提供ISBN，将会抛出一个错误，这是因为display方法要求书籍对象有一个准确的ISBN
+        ，否则就找不到相对应的图片，也不能生成一个用于购买图书的链接，title和author是可选的。咋一看这符合要求，
+        不过最大的问题就是你无法检验ISBN数据的完整性，而不完整的ISBN有可能使display失灵，破坏了契约。如果Book对象
+        创建时没有抛出任何错误，那么display方法就应该正常工作。下面的版本强化了检验ISBN。
+
+        (2)  严格一些的门户大开型
+        var Book = function(isbn, title, author) {
+            if(!this.checkIsbn(isbn)) throw new Error("Book: Invalid ISBN.");
+            this.isbn   = isbn;
+            this.title  = title || "No title specified";
+            this.author = author || "No author specified";
+        }
+
+        Book.prototype = {
+            checkIsbn : function(isbn) {
+                if(isbn == undefined || typeof isbn != 'string') { return false; }
+
+                isbn = isbn.replace(/-/, ''); //remove dashes.
+                if(isbn.length != 10 && isbn.length != 13) { return false; }
+
+                var sum = 0;
+                if(isbn.length === 10) { //10 digit ISBN
+                    if(!isbn.match(/^\d{9}/)) { //Ensure characters 1 through 9 are digit
+                        return false;
+                    }  
+
+                    for(var i = 0; i < 9; i++) {
+                        sum += isbn.charAt(i) * (10 -i);
+                    }
+                    var checksum = sum%11;
+                    if(checksum === 10) checksum = 'X';
+                    if(isbn.charAt(9) != checksum) { return false; }
+
+                } else {
+                    if(!isbn.match(/^/d{12}/)) { //Ensure characters 1 through 12 are digit 
+                        return false; 
+                    }
+                    for(var i = 0; i < 12; i++) {
+                        sum += isbn.charAt(i) * ( ( i % 2 ===0 ) ? 1 : 3 );
+                    }
+                    var checksum = sum % 10;
+                    if(isbn.charAt(12) != checksum) { return false; }
+                }
+                return true;
+            },
+
+            display : function() { 
+                //... 
+            }
+        };
+
+        /*  加入了一个checkIsbn方法，确保isbn为准确的
+         *  Book.prototype被设置为字面量，这样就可以多个非法写在{}内。
+         *  但是这样看起来真的万无一失，可是，实例化书籍对象后却可以修改其isbn属性，这种毫无控制不符合软件工程
+         *  下面为Book对象添加getter和setter方法，用来把新值赋给属性之前进行各种检验
+        */
+
+        (3)  加入取值器和赋值器之后的新版Book对象
+
+        var Publication = new Interface('Publication', ['getIsbn', 'setIsbn', 'getTitle', 'setTitle', 
+          'getAuthor', 'setAuthor', 'display']);
+
+        var Book = function(isbn, title, author) { //implements Publication
+            this.setIsbn(isbn);
+            this.setTitle(title);
+            this.setAuthor(author);
+        }
+
+        Book.prototype = {
+            checkIsbn : function(isbn) {
+                //...
+            },
+            getIsbn   : function() {
+                return this.isbn;
+            },
+            setIsbn   : function(isbn) {
+                if(!this.checkIsbn(isbn)) throw new Error("Book: Invalid ISBN.");
+                this.isbn = isbn;
+            },
+            getTitle  : function() {
+                return this.title;
+            },
+            setTitle  : function(title) {
+                this.title = title || "No title specified";
+            },
+            getAuthor : function() {
+                return this.author;
+            },
+            setAuthor : function(author) {
+                this.author = author || "No author specified";
+            },
+
+            display   : function() {
+                //...
+            }
+        };
+        //注意，这是使用门户大开型对象创建方式所能得到的最好结果了，里面包含了一个明确的定义的接口、一些对数据
+        //具有保护作用的取值器和赋值器，以及一些有效性检验方法，不过不能真正的严格保护内部数据，但是使用方便。
+
+      (4) 用命名规范区别私用成员创建对象
+        var Book = function(isbn, title, author) {
+            this.setIsbn(isbn);
+            this.setTitle(title);
+            this.setAuthor(author);
+        }
+
+        Book.prototype = {
+            checkIsbn : function(isbn) {
+                //...
+            },
+            getIsnb   : function() {
+                return this._isbn;
+            },
+            setIsbn   : function() {
+                if(!this.checkIsbn(isbn)) throw new Error("Book: Invalid ISBN.");
+                this._isbn = isbn;
+            },
+            getTitle  : function() {
+                return this._title;
+            },
+            setTitle  : function(title) {
+                this._title = title || "No title spectified";
+            },
+            getAuthor : function() {
+                return this._author;
+            },
+            setAuthor : function(author) {
+                this._author = author || "No author specified";
+            },
+
+            display   : function() {
+                //...
+            }
+        };
+        //在这个例子中，所有的属性都已经重新命名，每个属性的名称前都加了一个下划线，表示它是私有成员变量
+        //下划线标明归根到底还是一种约定，需要在大家都遵守的情况下得到很好的使用。
+
+      (5)  作用域、嵌套函数和闭包来创建真正的私有成员
+
+        接下来讨论真正的私用属性，当前先要说下JavaScript中的作用域。
+        在JavaScript中只有函数有作用域，也就是所在函数内部声明的变量在函数外部无法访问，例如：
+
+        function foo() {
+            var a = 10;
+
+            function bar() {
+                a *= 2;
+            }
+
+            bar();
+            return a;
+        }
+
+        var baz = foo(); //baz is a reference to function bar.
+        //baz(); //return 20
+        //baz(); //error Uncaught TypeError: Property 'baz' of object [object Window] is not a function 
+        //baz(); //error Uncaught TypeError: Property 'baz' of object [object Window] is not a function 
+
+        function a() {
+            //return alert("a");
+            return function() { alert("a"); }
+        }
+        var b = a();
+        b(); // alert("a");
+        b(); //error
+        b(); //error 
+
+        //也就是说定义一个函数并赋给一个引用，引用不可多次调用，因为一次调用后元函数就销毁了，被回收了。
+
+        //但是...
+
+        function foo() {
+            var a = 10;
+
+            function bar() {
+                a *= 2;
+                return a;
+            }
+
+            return bar;
+        }
+
+        var baz = foo(); //baz is a reference to function bar.
+        baz(); //return 20
+        baz(); //return 40
+        baz(); //return 80
+
+        var blat = foo(); //blat is another reference of function bar.
+        blat(); //20 because blat is a new copy of bar,have nothing to do with the baz 
+        blat(); //40
+        blat(); //80
+
+        //这段代码最大的启示是：证明了JavaScript的作用域是此法性质的，即函数是运行在定义它的作用域中
+        //而非调用它的作用域中(如果是调用作用域，a就会被保存，因为还是foo())，而且告诉了我们最简单的一个
+        //创建闭包的方法，返回一个function。
+        *********************  返回一个内嵌函数是最简单的构建闭包的方法  *********************
+
+      用闭包实现私有成员：(适用于真正需要私有成员的地方)
+        var Book = function(newIsbn, newTitle, newAuthor) {
+
+            //private attributes
+            var isbn, title, author;
+
+            //private methods
+            function checkIsbn(isbn) {
+                //...
+            }
+
+            //privileged methods
+            this.getIsbn = function() {
+                return isbn;
+            };
+            this.setIsbn = function(newIsbn) {
+                if(!checkIsbn(newIsbn)) throw new Error("Book: invalid ISBN.");
+                isbn = newIsbn;
+            };
+            this.getTitle = function() {
+                return title;
+            };
+            this.setTitle = function(newTitle) {
+                title = newTitle || "No title specified.";
+            };
+            this.getAuthor  function() {
+                return author;
+            };
+            this.setAuthor = function(newAuthor) {
+                author = newAuthor || "No author sepctified.";
+            };
+
+            //constructor code
+            this.setIsbn(newIsbn);
+            this.setTitle(newTitle);
+            this.setAuthor(newAuthor);
+        };
+
+        //Public, non-privileged methods.
+        Book.prototype = {
+            display : function() {
+                //...
+            }
+        };
+
+        /*
+         *  这与我们先前创建对象的方式有什么不同那？
+         *  在本例中，我们只使用var创建变量，还有checkIsbn方法，这就意味着这些都只存在于Book构造器中
+         *  需要访问这些变量的方法称为特权方法，因为他们虽然是public的，却肩负访问私有变量的重任
+         *  这种对象创建方式解决了原来创建对象的其他模式中的所有问题，但是这种方式会为每一个对象
+         *  创建一份，耗费了更多内存并且在派生中也更困难，被称为"继承破坏封装"，适用于真正需要私有成员的地方
+        */
+
+    3.3  更多高级对象的创建模式
+      (6)  静态方法和属性
+
+        添加了静态属性和方法的Book类
+
+        var Book = (function() {
+
+            //private static attributes.
+            var numOfBooks = 0;
+
+            //private static method.
+            function checkIsbn(isbn) {
+                //...
+            }
+ 
+            //return the constructor.
+            return function(newIsbn, newTitle, newAuthor) {
+                //private attributes.
+                var isbn, title, author;
+
+                //privileged methods
+                this.getIsbn = function() {
+                    return isbn;
+                };
+                this.setIsbn = function(newIsbn) {
+                    if(!checkIsbn(newIsbn)) throw new Error("Book: invalid ISBN.");
+                    isbn = newIsbn;
+                };
+                this.getTitle = function() {
+                    return title;
+                };
+                this.setTitle = function(newTitle) {
+                    title = newTitle || "No title specified.";
+                };
+                this.getAuthor  function() {
+                    return author;
+                };
+                this.setAuthor = function(newAuthor) {
+                    author = newAuthor || "No author sepctified.";
+                };
+
+                //constructor code
+                numOfBooks++; //  keep track of how many books have been instantiated
+                              //  with the private static attribute.
+                if(numOfBooks > 50) 
+                    throw new Error('Book: Only 50 instances of Book can be created');
+
+                this.setIsbn(newIsbn);
+                this.setTitle(newTitle);
+                this.setAuthor(newAuthor);                  
+            }
+        })();
+
+        //Public, non-privileged methods.
+        Book.prototype = {
+            display : function() {
+                //...
+            }
+        };
+
+        /*
+         *  这里和上面的最大区别就是构造器从普通函数变成了一个内嵌函数，并且被作为函数的返回值赋给了
+         *  变量Book，这就创建了闭包，你可以把静态的私用成员声明在里面，位于外层的函数声明之后的一对
+         *  空括号很重要，作用是代码一载入就执行，调用这个内层函数，外层函数只是用来创建一个闭包用来
+         *  存放静态私用成员的闭包。numOfBooks这个静态属性控制Book的实例化的个数限制在不超过50个
+        */
+
+        常量  
+        
+        class.getUPPER_BOUND();
+        为了实现这个取值器，需要使用我们还未讲过的特权静态方法
+
+        var Class = (function() {
+            //Costants ( create as private static attributes )
+            var UPPER_BOUND = 100;
+            //Constructor
+            var ctor = function(constructorArgument) {
+                //...
+            };
+            //Privileged static method.
+            ctor.getUPPER_BOUND = function() {
+                return UPPER_BOUND;
+            };
+            //...
+            //return the constructor
+            return ctor;
+        })();
+
+        //多个常量，通用取值器方法
+        var Class = (function() {
+            //Private static attributes.
+            var constants = {
+                UPPER_BOUND : 100,
+                LOWER_BOUND : -100
+            };
+            //Constructor
+            var ctor = function() {
+                //...
+            };
+            //Privileged static method
+            ctor.getConstants = function(name) {
+                return constants[name];
+            };
+            //...
+
+            return ctor;
+        })();
+
+        /* Usage */
+        Class.getConstants('UPPER_BOUND');
+
+        单体和对象工厂  后续详细讲
+
+    3.4  封装之利 ...
+    3.5  封装之弊 ...   
+         
+    3.6  小节：
+        本章讨论了信息隐藏的概念以及如何用封装这种手段实现它。因为JavaScript没有对封装提供内置的支持，
+      所以实现必须依靠一些其他的技术，如果能够确信其他程序员只会使用接口中规定的方法，或者并非迫切的
+      需要保持内部数据的完整性，那就可以使用门户大开型的创建方式，命名规范可以用来引导其他程序员，但
+      非强制，如果需要实现真正的私用成员，那就是用闭包吧，此外，关注一下JavaScript的作用域的特点。
